@@ -224,7 +224,7 @@ fn shadowAt(w: vec3f, n: vec3f) -> f32 {
   let nd = c.xyz / c.w;
   let uv = vec2f(nd.x * 0.5 + 0.5, 0.5 - nd.y * 0.5);
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0 || nd.z > 1.0) { return 1.0; }
-  let tx = 1.0 / 2048.0;
+  let tx = 1.0 / 3072.0;
   var s = 0.0;
   for (var i = -1; i <= 1; i++) {
     for (var j = -1; j <= 1; j++) {

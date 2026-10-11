@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Math, noise, terrain, layout
 // ─────────────────────────────────────────────────────────────────────────────
-const HALF = 2.6;            // block half-size (5.2 × 5.2)
+const HALF = 3.6;            // block half-size (7.2 × 7.2)
 const YB = -1.5;             // block bottom / studio floor
-const GRID = 128;            // shallow-water grid
+const GRID = 176;            // shallow-water grid
 const G_WATER = 4.6;         // wave gravity (slow, jelly-like)
 const G_BODY = 9.8;          // rigid-body gravity
 
@@ -154,6 +154,7 @@ const HUMP = [IC[0] - 0.2, IC[1] - 0.35];  // jungle hump
 const COVE = [IC[0] + 0.6, IC[1] + 0.74];  // bay facing the viewer
 const PEAK = [-0.66, -1.42];               // terraced rock peak
 const CLIFF = [0.4, -1.2];                 // east sea cliff where the waterfall drops
+const ISLETS = [[2.45, -2.3, 0.78, 1.0], [-2.6, 2.25, 0.5, 0.75], [-2.75, -2.45, 0.4, 0.6]]; // x, z, height, size
 function segDist(x, z, a, b) {
   const px = x - a[0], pz = z - a[1], bx = b[0] - a[0], bz = b[1] - a[1];
   const t = clamp((px * bx + pz * bz) / (bx * bx + bz * bz), 0, 1);
@@ -188,6 +189,14 @@ function terrainRaw(x, z) {
   // deep inlet under the cliff for the waterfall to plunge into
   const inlet = smoothstep(CLIFF[0] + 0.03, CLIFF[0] + 0.1, x) * Math.exp(-(((z - CLIFF[1]) / 0.3) ** 2)) * smoothstep(CLIFF[0] + 0.75, CLIFF[0] + 0.45, x);
   if (inlet > 0) h = lerp(h, -0.42 - 0.08 * fbm2(x * 3, z * 3), inlet);
+  // small rocky islets out in the wider sea
+  for (const [ix, iz, ih, is] of ISLETS) {
+    const d = Math.hypot(x - ix, (z - iz) * 1.12) / is * (1 + 0.16 * (vnoise2(x * 6 + ix, z * 6) - 0.5));
+    if (d > 0.62) continue;
+    h = lerp(h, 0.05 + 0.03 * (fbm2(x * 5, z * 5) - 0.5), smoothstep(0.6, 0.38, d));
+    const stack = ih * Math.pow(smoothstep(0.34, 0.0, d), 0.75) * (0.8 + 0.4 * fbm2(x * 6 + 3, z * 6));
+    if (stack > 0.02) h = Math.max(h, lerp(stack, terrace(stack, 0.11), 0.7));
+  }
   // the cove
   const cr = Math.hypot(x - COVE[0], (z - COVE[1]) * 1.1);
   const cm = smoothstep(0.6, 0.28, cr);
@@ -196,7 +205,7 @@ function terrainRaw(x, z) {
 }
 
 // fine terrain grid for fast physics lookups
-const TG_N = 256;
+const TG_N = 352;
 const TG = new Float32Array(TG_N * TG_N);
 for (let j = 0; j < TG_N; j++) for (let i = 0; i < TG_N; i++) {
   TG[j * TG_N + i] = terrainRaw(-HALF + (i / (TG_N - 1)) * 2 * HALF, -HALF + (j / (TG_N - 1)) * 2 * HALF);

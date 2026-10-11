@@ -162,7 +162,7 @@ async function boot() {
       if (pointers.size < 2) return;
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      app.cam.tDist = clamp(drag.dist0 * (drag.d0 / Math.max(d, 1)), 4.5, 40);
+      app.cam.tDist = clamp(drag.dist0 * (drag.d0 / Math.max(d, 1)), 4.5, 55);
       return;
     }
     const dx = x - drag.x, dy = y - drag.y;
@@ -268,7 +268,7 @@ async function boot() {
   canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); endDrag(false); });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    app.cam.tDist = clamp(app.cam.tDist * Math.exp(e.deltaY * 0.0012), 4.5, 40);
+    app.cam.tDist = clamp(app.cam.tDist * Math.exp(e.deltaY * 0.0012), 4.5, 55);
   }, { passive: false });
 
   // ── loop ──────────────────────────────────────────────────────────────────

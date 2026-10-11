@@ -261,9 +261,9 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
 // ─────────────────────────────────────────────────────────────────────────────
 //  Math, noise, terrain, layout
 // ─────────────────────────────────────────────────────────────────────────────
-const HALF = 2.6;            // block half-size (5.2 × 5.2)
+const HALF = 3.6;            // block half-size (7.2 × 7.2)
 const YB = -1.5;             // block bottom / studio floor
-const GRID = 128;            // shallow-water grid
+const GRID = 176;            // shallow-water grid
 const G_WATER = 4.6;         // wave gravity (slow, jelly-like)
 const G_BODY = 9.8;          // rigid-body gravity
 
@@ -414,6 +414,7 @@ const HUMP = [IC[0] - 0.2, IC[1] - 0.35];  // jungle hump
 const COVE = [IC[0] + 0.6, IC[1] + 0.74];  // bay facing the viewer
 const PEAK = [-0.66, -1.42];               // terraced rock peak
 const CLIFF = [0.4, -1.2];                 // east sea cliff where the waterfall drops
+const ISLETS = [[2.45, -2.3, 0.78, 1.0], [-2.6, 2.25, 0.5, 0.75], [-2.75, -2.45, 0.4, 0.6]]; // x, z, height, size
 function segDist(x, z, a, b) {
   const px = x - a[0], pz = z - a[1], bx = b[0] - a[0], bz = b[1] - a[1];
   const t = clamp((px * bx + pz * bz) / (bx * bx + bz * bz), 0, 1);
@@ -448,6 +449,14 @@ function terrainRaw(x, z) {
   // deep inlet under the cliff for the waterfall to plunge into
   const inlet = smoothstep(CLIFF[0] + 0.03, CLIFF[0] + 0.1, x) * Math.exp(-(((z - CLIFF[1]) / 0.3) ** 2)) * smoothstep(CLIFF[0] + 0.75, CLIFF[0] + 0.45, x);
   if (inlet > 0) h = lerp(h, -0.42 - 0.08 * fbm2(x * 3, z * 3), inlet);
+  // small rocky islets out in the wider sea
+  for (const [ix, iz, ih, is] of ISLETS) {
+    const d = Math.hypot(x - ix, (z - iz) * 1.12) / is * (1 + 0.16 * (vnoise2(x * 6 + ix, z * 6) - 0.5));
+    if (d > 0.62) continue;
+    h = lerp(h, 0.05 + 0.03 * (fbm2(x * 5, z * 5) - 0.5), smoothstep(0.6, 0.38, d));
+    const stack = ih * Math.pow(smoothstep(0.34, 0.0, d), 0.75) * (0.8 + 0.4 * fbm2(x * 6 + 3, z * 6));
+    if (stack > 0.02) h = Math.max(h, lerp(stack, terrace(stack, 0.11), 0.7));
+  }
   // the cove
   const cr = Math.hypot(x - COVE[0], (z - COVE[1]) * 1.1);
   const cm = smoothstep(0.6, 0.28, cr);
@@ -456,7 +465,7 @@ function terrainRaw(x, z) {
 }
 
 // fine terrain grid for fast physics lookups
-const TG_N = 256;
+const TG_N = 352;
 const TG = new Float32Array(TG_N * TG_N);
 for (let j = 0; j < TG_N; j++) for (let i = 0; i < TG_N; i++) {
   TG[j * TG_N + i] = terrainRaw(-HALF + (i / (TG_N - 1)) * 2 * HALF, -HALF + (j / (TG_N - 1)) * 2 * HALF);
@@ -817,7 +826,7 @@ fn shadowAt(w: vec3f, n: vec3f) -> f32 {
   let nd = c.xyz / c.w;
   let uv = vec2f(nd.x * 0.5 + 0.5, 0.5 - nd.y * 0.5);
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0 || nd.z > 1.0) { return 1.0; }
-  let tx = 1.0 / 2048.0;
+  let tx = 1.0 / 3072.0;
   var s = 0.0;
   for (var i = -1; i <= 1; i++) {
     for (var j = -1; j <= 1; j++) {
@@ -2033,7 +2042,7 @@ function buildSeaFloor(mb) {
   mb.tube(ma, mbn, 0.017, 9, [0.3, 0.23, 0.15], MAT.WOOD, 0, { r1: 0.8, capCol: [0.62, 0.48, 0.3] });
   mb.tube(v3.lerp(ma, mbn, 0.65), v3.add(v3.lerp(ma, mbn, 0.65), [0.2, 0.06, -0.12]), 0.008, 6, [0.3, 0.23, 0.15], MAT.WOOD);
   // swaying kelp
-  const clumps = [[1.75, -0.7], [-1.9, 1.55], [1.95, 1.75], [0.35, 1.95], [-0.35, 0.95], [2.0, 0.3]];
+  const clumps = [[1.75, -0.7], [-1.9, 1.55], [1.95, 1.75], [0.35, 1.95], [-0.35, 0.95], [2.0, 0.3], [3.0, 0.9], [2.9, 3.0], [-0.9, 3.05], [-3.0, 0.4], [1.3, 3.1], [3.1, -1.5], [-1.6, -2.9]];
   for (const [cx, cz] of clumps) {
     for (let k = 0; k < 4; k++) {
       const x = cx + rr(-0.12, 0.12), z = cz + rr(-0.12, 0.12), y = H(x, z);
@@ -2049,17 +2058,18 @@ function buildSeaFloor(mb) {
     }
   }
   // doubloons on the sea floor
-  for (const [x, z] of [[-0.75, 1.2], [-1.15, 1.62], [-0.7, 1.7], [0.6, 1.5], [1.6, 0.2], [-0.2, 2.0], [1.3, 1.9]]) {
+  for (const [x, z] of [[-0.75, 1.2], [-1.15, 1.62], [-0.7, 1.7], [0.6, 1.5], [1.6, 0.2], [-0.2, 2.0], [1.3, 1.9], [2.6, 2.4], [-2.0, 2.9], [3.0, -0.5]]) {
     coinGeom(mb, m4.chain(m4.T(x, H(x, z) + 0.004, z), m4.RY(rr(0, 3)), m4.RX(rr(-0.15, 0.15))), 0);
   }
   // seabed rocks and shells
-  for (let k = 0; k < 14; k++) {
-    const x = rr(-2.4, 2.4), z = rr(0.2, 2.4);
+  for (let k = 0; k < 30; k++) {
+    const x = rr(-HALF + 0.2, HALF - 0.2), z = rr(-HALF + 0.2, HALF - 0.2);
+    if (H(x, z) > -0.35) continue;
     if (Math.hypot(x - LAYOUT.ship[0], z - LAYOUT.ship[2]) < 0.4) continue;
     rock(mb, [x, H(x, z), z], rr(0.03, 0.07), [0.6, 0.55, 0.48], 0.6);
   }
-  for (let k = 0; k < 10; k++) {
-    const x = rr(-2.4, 2.4), z = rr(-0.2, 2.4), y = H(x, z);
+  for (let k = 0; k < 22; k++) {
+    const x = rr(-HALF + 0.2, HALF - 0.2), z = rr(-HALF + 0.2, HALF - 0.2), y = H(x, z);
     if (y > -0.4) continue;
     mb.sphere(m4.chain(m4.T(x, y + 0.004, z), m4.RY(rr(0, 6))), 0.022, 0.009, 0.018, 8, 5, [1.0, 0.75, 0.68], MAT.GUMMY);
   }
@@ -2079,13 +2089,13 @@ function buildSeaFloor(mb) {
 }
 
 function buildTerrain(mb) {
-  const N = 168;
+  const N = 232;
   mb.surf(N, N, (uu, vv) => {
     const x = lerp(-HALF, HALF, uu), z = lerp(-HALF, HALF, vv);
     return { p: [x, H(x, z), z], n: Hn(x, z) };
   }, { mat: MAT.TERRAIN, col: [1, 1, 1] });
   // cut faces of the block: candy strata from the floor to the sea bed
-  const S = 128;
+  const S = 176;
   const sides = [
     (t) => [HALF, lerp(-HALF, HALF, t), [1, 0, 0]], (t) => [-HALF, lerp(HALF, -HALF, t), [-1, 0, 0]],
   ];
@@ -2183,6 +2193,31 @@ function buildLedgeJungle(mb) {
   }
 }
 
+// bushes, ferns and boulders on the outer islets
+function buildIslets(mb) {
+  rngState = 7171;
+  const greens = [[0.22, 0.56, 0.17], [0.34, 0.66, 0.2], [0.18, 0.48, 0.18]];
+  for (const [ix, iz, ih, is] of ISLETS) {
+    for (let k = 0; k < 14 * is; k++) {
+      const a = rnd() * 6.28, r = rr(0.05, 0.3) * is;
+      const x = ix + Math.cos(a) * r, z = iz + Math.sin(a) * r, y = H(x, z), n = Hn(x, z);
+      if (y < 0.06 || n[1] < 0.75) continue;
+      const s = rr(0.03, 0.055);
+      for (let j = 0; j < 3; j++) {
+        const px = x + rr(-0.03, 0.03), pz = z + rr(-0.03, 0.03);
+        mb.sphere(m4.T(px, H(px, pz) + s * 0.4, pz), s, s * 0.85, s, 10, 7, greens[(j + k) % 3], MAT.GUMMY);
+      }
+    }
+    for (let k = 0; k < 10 * is; k++) {
+      const a = rnd() * 6.28, r = rr(0.36, 0.5) * is;
+      const x = ix + Math.cos(a) * r, z = iz + Math.sin(a) * r * 0.9, y = H(x, z);
+      if (y > 0.08 || y < -0.25) continue;
+      const s = rr(0.03, 0.07);
+      rock(mb, [x, y + s * 0.25, z], s, rnd() < 0.5 ? [0.52, 0.47, 0.42] : [0.44, 0.4, 0.38], rr(0.55, 0.85));
+    }
+  }
+}
+
 function buildMain() {
   const mb = new MB();
   buildTerrain(mb);
@@ -2190,6 +2225,7 @@ function buildMain() {
   buildPalms(mb);
   buildWaterfall(mb);
   buildLedgeJungle(mb);
+  buildIslets(mb);
   buildCamp(mb);
   buildChest(mb);
   buildBeachProps(mb);
@@ -2664,7 +2700,7 @@ class Particles {
 // ─────────────────────────────────────────────────────────────────────────────
 //  WebGPU renderer
 // ─────────────────────────────────────────────────────────────────────────────
-const SHADOW_RES = 2048;
+const SHADOW_RES = 3072;
 const HDR = 'rgba16float';
 
 class Renderer {
@@ -2951,8 +2987,8 @@ class App {
     this.fireflies = Array.from({ length: 16 }, () => ({ a: rnd() * 6.28, r: rr(0.15, 0.9), h: rr(0.2, 0.55), s: rr(0.2, 0.5), ph: rnd() * 10 }));
     this.bubbles = [];
     rngState = 31337;
-    while (this.bubbles.length < 34) {
-      const x = rr(-2.4, 2.4), z = rr(-2.4, 2.4), g = H(x, z);
+    while (this.bubbles.length < 60) {
+      const x = rr(-HALF + 0.2, HALF - 0.2), z = rr(-HALF + 0.2, HALF - 0.2), g = H(x, z);
       if (g > -0.35) continue;
       this.bubbles.push([x, rr(g + 0.08, -0.08), z, rr(0.008, 0.024), rnd() * 10]);
     }
@@ -3030,24 +3066,24 @@ class App {
   dropCoins() {
     for (let k = 0; k < 5; k++) {
       const c = this.alloc(BT.COIN);
-      c.spawn([rr(-0.6, 1.9), rr(1.1, 1.5), rr(0.3, 2.1)], [rr(-0.2, 0.2), 0, rr(-0.2, 0.2)]);
+      c.spawn([rr(-1.2, 2.6), rr(1.1, 1.5), rr(0.2, 2.8)], [rr(-0.2, 0.2), 0, rr(-0.2, 0.2)]);
     }
   }
   dropBarrel() {
     let x, z, tries = 0;
-    do { x = rr(-1.8, 2.0); z = rr(0.2, 2.1); tries++; } while ((H(x, z) > -0.3 || Math.hypot(x - this.ship.p[0], z - this.ship.p[2]) < 0.45) && tries < 20);
+    do { x = rr(-2.4, 2.8); z = rr(0.2, 2.9); tries++; } while ((H(x, z) > -0.3 || Math.hypot(x - this.ship.p[0], z - this.ship.p[2]) < 0.45) && tries < 20);
     const b = this.alloc(BT.BARREL);
     b.spawn([x, 1.3, z], [0, 0, 0]);
   }
   seaSpot(minDist = 0.45) {
     let x, z, tries = 0;
-    do { x = rr(-2.1, 2.2); z = rr(-0.4, 2.2); tries++; }
+    do { x = rr(-HALF + 0.35, HALF - 0.35); z = rr(-1.0, HALF - 0.35); tries++; }
     while ((H(x, z) > -0.3 || Math.hypot(x - this.ship.p[0], z - this.ship.p[2]) < minDist) && tries < 30);
     return [x, z];
   }
   seedCrates() {
     rngState = 9001;
-    for (let k = 0; k < 5; k++) {
+    for (let k = 0; k < 8; k++) {
       const [x, z] = this.seaSpot(0.5);
       const c = this.alloc(BT.CRATE);
       c.spawn([x, 0.0, z], [0, 0, 0]);
@@ -3279,7 +3315,7 @@ class App {
     this.crateTimer += dt;
     if (this.crateTimer > 5) {
       this.crateTimer = 0;
-      if (this.bodies.filter((x) => x.active && x.type === BT.CRATE).length < 4) this.dropCrate();
+      if (this.bodies.filter((x) => x.active && x.type === BT.CRATE).length < 6) this.dropCrate();
     }
     this.water.step(dt, gW[0], gW[2], 0.05 + this.params.damp * 1.6, 0.00004 + firm * 0.00016);
     // palms: springy bend + wind sway
@@ -3372,7 +3408,7 @@ class App {
   // ── per-frame ────────────────────────────────────────────────────────────
   baseDist() {
     const a = (this.fitW || this.css[0]) / this.css[1];
-    return 12.8 * Math.max(1, 1.45 / a);
+    return 12.8 * 1.2 * Math.max(1, 1.45 / a);
   }
   camLocal() { return m4.pt(this.invBlock || m4.id(), this.camPos || [0, 5, 10]); }
   update(dtReal) {
@@ -3403,7 +3439,7 @@ class App {
   render() {
     const R = this.r, U = R.uni, w = R.size[0], h = R.size[1];
     const c = this.cam;
-    const target = c.target || [0, -0.2, 0];
+    const target = c.target || [-0.15, -0.2, -0.3];
     const eye = [target[0] + c.dist * Math.cos(c.pitch) * Math.sin(c.yaw), target[1] + c.dist * Math.sin(c.pitch), target[2] + c.dist * Math.cos(c.pitch) * Math.cos(c.yaw)];
     this.camPos = eye;
     const near = 0.5, far = 80;
@@ -3417,8 +3453,9 @@ class App {
     const td = this.tod;
     const L = td.dir;
     const lc = [0, -0.4, 0];
-    const lview = m4.lookAt(v3.add(lc, v3.mul(L, 12)), lc, Math.abs(L[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0]);
-    const lproj = m4.ortho(-4.4, 4.4, -4.4, 4.4, 2, 24);
+    const lview = m4.lookAt(v3.add(lc, v3.mul(L, 16)), lc, Math.abs(L[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0]);
+    const SR = HALF * 1.72;
+    const lproj = m4.ortho(-SR, SR, -SR, SR, 2, 34);
     const lvp = m4.mul(lproj, lview);
     const fl = FLAVOURS[this.params.flavour];
     U.set(vp, 0); U.set(this.invViewProj, 16); U.set(lvp, 32); U.set(blockM, 48); U.set(this.invBlock, 64);
@@ -3728,7 +3765,7 @@ async function boot() {
       if (pointers.size < 2) return;
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      app.cam.tDist = clamp(drag.dist0 * (drag.d0 / Math.max(d, 1)), 4.5, 40);
+      app.cam.tDist = clamp(drag.dist0 * (drag.d0 / Math.max(d, 1)), 4.5, 55);
       return;
     }
     const dx = x - drag.x, dy = y - drag.y;
@@ -3834,7 +3871,7 @@ async function boot() {
   canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); endDrag(false); });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    app.cam.tDist = clamp(app.cam.tDist * Math.exp(e.deltaY * 0.0012), 4.5, 40);
+    app.cam.tDist = clamp(app.cam.tDist * Math.exp(e.deltaY * 0.0012), 4.5, 55);
   }, { passive: false });
 
   // ── loop ──────────────────────────────────────────────────────────────────

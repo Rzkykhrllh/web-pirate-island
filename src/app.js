@@ -61,8 +61,8 @@ class App {
     this.fireflies = Array.from({ length: 16 }, () => ({ a: rnd() * 6.28, r: rr(0.15, 0.9), h: rr(0.2, 0.55), s: rr(0.2, 0.5), ph: rnd() * 10 }));
     this.bubbles = [];
     rngState = 31337;
-    while (this.bubbles.length < 34) {
-      const x = rr(-2.4, 2.4), z = rr(-2.4, 2.4), g = H(x, z);
+    while (this.bubbles.length < 60) {
+      const x = rr(-HALF + 0.2, HALF - 0.2), z = rr(-HALF + 0.2, HALF - 0.2), g = H(x, z);
       if (g > -0.35) continue;
       this.bubbles.push([x, rr(g + 0.08, -0.08), z, rr(0.008, 0.024), rnd() * 10]);
     }
@@ -140,24 +140,24 @@ class App {
   dropCoins() {
     for (let k = 0; k < 5; k++) {
       const c = this.alloc(BT.COIN);
-      c.spawn([rr(-0.6, 1.9), rr(1.1, 1.5), rr(0.3, 2.1)], [rr(-0.2, 0.2), 0, rr(-0.2, 0.2)]);
+      c.spawn([rr(-1.2, 2.6), rr(1.1, 1.5), rr(0.2, 2.8)], [rr(-0.2, 0.2), 0, rr(-0.2, 0.2)]);
     }
   }
   dropBarrel() {
     let x, z, tries = 0;
-    do { x = rr(-1.8, 2.0); z = rr(0.2, 2.1); tries++; } while ((H(x, z) > -0.3 || Math.hypot(x - this.ship.p[0], z - this.ship.p[2]) < 0.45) && tries < 20);
+    do { x = rr(-2.4, 2.8); z = rr(0.2, 2.9); tries++; } while ((H(x, z) > -0.3 || Math.hypot(x - this.ship.p[0], z - this.ship.p[2]) < 0.45) && tries < 20);
     const b = this.alloc(BT.BARREL);
     b.spawn([x, 1.3, z], [0, 0, 0]);
   }
   seaSpot(minDist = 0.45) {
     let x, z, tries = 0;
-    do { x = rr(-2.1, 2.2); z = rr(-0.4, 2.2); tries++; }
+    do { x = rr(-HALF + 0.35, HALF - 0.35); z = rr(-1.0, HALF - 0.35); tries++; }
     while ((H(x, z) > -0.3 || Math.hypot(x - this.ship.p[0], z - this.ship.p[2]) < minDist) && tries < 30);
     return [x, z];
   }
   seedCrates() {
     rngState = 9001;
-    for (let k = 0; k < 5; k++) {
+    for (let k = 0; k < 8; k++) {
       const [x, z] = this.seaSpot(0.5);
       const c = this.alloc(BT.CRATE);
       c.spawn([x, 0.0, z], [0, 0, 0]);
@@ -389,7 +389,7 @@ class App {
     this.crateTimer += dt;
     if (this.crateTimer > 5) {
       this.crateTimer = 0;
-      if (this.bodies.filter((x) => x.active && x.type === BT.CRATE).length < 4) this.dropCrate();
+      if (this.bodies.filter((x) => x.active && x.type === BT.CRATE).length < 6) this.dropCrate();
     }
     this.water.step(dt, gW[0], gW[2], 0.05 + this.params.damp * 1.6, 0.00004 + firm * 0.00016);
     // palms: springy bend + wind sway
@@ -482,7 +482,7 @@ class App {
   // ── per-frame ────────────────────────────────────────────────────────────
   baseDist() {
     const a = (this.fitW || this.css[0]) / this.css[1];
-    return 12.8 * Math.max(1, 1.45 / a);
+    return 12.8 * 1.2 * Math.max(1, 1.45 / a);
   }
   camLocal() { return m4.pt(this.invBlock || m4.id(), this.camPos || [0, 5, 10]); }
   update(dtReal) {
@@ -513,7 +513,7 @@ class App {
   render() {
     const R = this.r, U = R.uni, w = R.size[0], h = R.size[1];
     const c = this.cam;
-    const target = c.target || [0, -0.2, 0];
+    const target = c.target || [-0.15, -0.2, -0.3];
     const eye = [target[0] + c.dist * Math.cos(c.pitch) * Math.sin(c.yaw), target[1] + c.dist * Math.sin(c.pitch), target[2] + c.dist * Math.cos(c.pitch) * Math.cos(c.yaw)];
     this.camPos = eye;
     const near = 0.5, far = 80;
@@ -527,8 +527,9 @@ class App {
     const td = this.tod;
     const L = td.dir;
     const lc = [0, -0.4, 0];
-    const lview = m4.lookAt(v3.add(lc, v3.mul(L, 12)), lc, Math.abs(L[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0]);
-    const lproj = m4.ortho(-4.4, 4.4, -4.4, 4.4, 2, 24);
+    const lview = m4.lookAt(v3.add(lc, v3.mul(L, 16)), lc, Math.abs(L[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0]);
+    const SR = HALF * 1.72;
+    const lproj = m4.ortho(-SR, SR, -SR, SR, 2, 34);
     const lvp = m4.mul(lproj, lview);
     const fl = FLAVOURS[this.params.flavour];
     U.set(vp, 0); U.set(this.invViewProj, 16); U.set(lvp, 32); U.set(blockM, 48); U.set(this.invBlock, 64);

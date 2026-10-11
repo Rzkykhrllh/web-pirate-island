@@ -496,7 +496,7 @@ function buildSeaFloor(mb) {
   mb.tube(ma, mbn, 0.017, 9, [0.3, 0.23, 0.15], MAT.WOOD, 0, { r1: 0.8, capCol: [0.62, 0.48, 0.3] });
   mb.tube(v3.lerp(ma, mbn, 0.65), v3.add(v3.lerp(ma, mbn, 0.65), [0.2, 0.06, -0.12]), 0.008, 6, [0.3, 0.23, 0.15], MAT.WOOD);
   // swaying kelp
-  const clumps = [[1.75, -0.7], [-1.9, 1.55], [1.95, 1.75], [0.35, 1.95], [-0.35, 0.95], [2.0, 0.3]];
+  const clumps = [[1.75, -0.7], [-1.9, 1.55], [1.95, 1.75], [0.35, 1.95], [-0.35, 0.95], [2.0, 0.3], [3.0, 0.9], [2.9, 3.0], [-0.9, 3.05], [-3.0, 0.4], [1.3, 3.1], [3.1, -1.5], [-1.6, -2.9]];
   for (const [cx, cz] of clumps) {
     for (let k = 0; k < 4; k++) {
       const x = cx + rr(-0.12, 0.12), z = cz + rr(-0.12, 0.12), y = H(x, z);
@@ -512,17 +512,18 @@ function buildSeaFloor(mb) {
     }
   }
   // doubloons on the sea floor
-  for (const [x, z] of [[-0.75, 1.2], [-1.15, 1.62], [-0.7, 1.7], [0.6, 1.5], [1.6, 0.2], [-0.2, 2.0], [1.3, 1.9]]) {
+  for (const [x, z] of [[-0.75, 1.2], [-1.15, 1.62], [-0.7, 1.7], [0.6, 1.5], [1.6, 0.2], [-0.2, 2.0], [1.3, 1.9], [2.6, 2.4], [-2.0, 2.9], [3.0, -0.5]]) {
     coinGeom(mb, m4.chain(m4.T(x, H(x, z) + 0.004, z), m4.RY(rr(0, 3)), m4.RX(rr(-0.15, 0.15))), 0);
   }
   // seabed rocks and shells
-  for (let k = 0; k < 14; k++) {
-    const x = rr(-2.4, 2.4), z = rr(0.2, 2.4);
+  for (let k = 0; k < 30; k++) {
+    const x = rr(-HALF + 0.2, HALF - 0.2), z = rr(-HALF + 0.2, HALF - 0.2);
+    if (H(x, z) > -0.35) continue;
     if (Math.hypot(x - LAYOUT.ship[0], z - LAYOUT.ship[2]) < 0.4) continue;
     rock(mb, [x, H(x, z), z], rr(0.03, 0.07), [0.6, 0.55, 0.48], 0.6);
   }
-  for (let k = 0; k < 10; k++) {
-    const x = rr(-2.4, 2.4), z = rr(-0.2, 2.4), y = H(x, z);
+  for (let k = 0; k < 22; k++) {
+    const x = rr(-HALF + 0.2, HALF - 0.2), z = rr(-HALF + 0.2, HALF - 0.2), y = H(x, z);
     if (y > -0.4) continue;
     mb.sphere(m4.chain(m4.T(x, y + 0.004, z), m4.RY(rr(0, 6))), 0.022, 0.009, 0.018, 8, 5, [1.0, 0.75, 0.68], MAT.GUMMY);
   }
@@ -542,13 +543,13 @@ function buildSeaFloor(mb) {
 }
 
 function buildTerrain(mb) {
-  const N = 168;
+  const N = 232;
   mb.surf(N, N, (uu, vv) => {
     const x = lerp(-HALF, HALF, uu), z = lerp(-HALF, HALF, vv);
     return { p: [x, H(x, z), z], n: Hn(x, z) };
   }, { mat: MAT.TERRAIN, col: [1, 1, 1] });
   // cut faces of the block: candy strata from the floor to the sea bed
-  const S = 128;
+  const S = 176;
   const sides = [
     (t) => [HALF, lerp(-HALF, HALF, t), [1, 0, 0]], (t) => [-HALF, lerp(HALF, -HALF, t), [-1, 0, 0]],
   ];
@@ -646,6 +647,31 @@ function buildLedgeJungle(mb) {
   }
 }
 
+// bushes, ferns and boulders on the outer islets
+function buildIslets(mb) {
+  rngState = 7171;
+  const greens = [[0.22, 0.56, 0.17], [0.34, 0.66, 0.2], [0.18, 0.48, 0.18]];
+  for (const [ix, iz, ih, is] of ISLETS) {
+    for (let k = 0; k < 14 * is; k++) {
+      const a = rnd() * 6.28, r = rr(0.05, 0.3) * is;
+      const x = ix + Math.cos(a) * r, z = iz + Math.sin(a) * r, y = H(x, z), n = Hn(x, z);
+      if (y < 0.06 || n[1] < 0.75) continue;
+      const s = rr(0.03, 0.055);
+      for (let j = 0; j < 3; j++) {
+        const px = x + rr(-0.03, 0.03), pz = z + rr(-0.03, 0.03);
+        mb.sphere(m4.T(px, H(px, pz) + s * 0.4, pz), s, s * 0.85, s, 10, 7, greens[(j + k) % 3], MAT.GUMMY);
+      }
+    }
+    for (let k = 0; k < 10 * is; k++) {
+      const a = rnd() * 6.28, r = rr(0.36, 0.5) * is;
+      const x = ix + Math.cos(a) * r, z = iz + Math.sin(a) * r * 0.9, y = H(x, z);
+      if (y > 0.08 || y < -0.25) continue;
+      const s = rr(0.03, 0.07);
+      rock(mb, [x, y + s * 0.25, z], s, rnd() < 0.5 ? [0.52, 0.47, 0.42] : [0.44, 0.4, 0.38], rr(0.55, 0.85));
+    }
+  }
+}
+
 function buildMain() {
   const mb = new MB();
   buildTerrain(mb);
@@ -653,6 +679,7 @@ function buildMain() {
   buildPalms(mb);
   buildWaterfall(mb);
   buildLedgeJungle(mb);
+  buildIslets(mb);
   buildCamp(mb);
   buildChest(mb);
   buildBeachProps(mb);
