@@ -36,7 +36,8 @@
 :root.night[data-flavour="rum"] { --accent: #e3963a; }
 :root.night[data-flavour="kraken"] { --accent: #a77ff0; }
 
-html, body { height: 100%; }
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
 body {
   background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 14px;
   overflow: hidden; -webkit-font-smoothing: antialiased; transition: background 0.6s, color 0.6s;

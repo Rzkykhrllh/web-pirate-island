@@ -1,3 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>html,body{margin:0;padding:0}[hidden]{display:none!important}</style>
+</head>
+<body>
 <title>Pirate Jelly</title>
 <meta name="description" content="Material Studies: a pirate cove set in a block of jelly, rendered live with WebGPU.">
 <style>
@@ -36,7 +44,8 @@
 :root.night[data-flavour="rum"] { --accent: #e3963a; }
 :root.night[data-flavour="kraken"] { --accent: #a77ff0; }
 
-html, body { height: 100%; }
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
 body {
   background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 14px;
   overflow: hidden; -webkit-font-smoothing: antialiased; transition: background 0.6s, color 0.6s;
@@ -3754,3 +3763,6 @@ boot().catch((e) => { console.error(e); showFallback('Something went wrong while
 
 })();
 </script>
+
+</body>
+</html>
