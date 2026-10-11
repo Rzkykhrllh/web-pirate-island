@@ -381,6 +381,11 @@ class App {
     this.ship.step(dt, gB, this.water, this.windVec);
     this.stepBodies(dt, gB);
     this.flushBreaks();
+    // the waterfall keeps the inlet churning: zero-mean pulses plus a gentle outflow
+    const fp = LAYOUT.fall.plunge;
+    this.fallPhase = (this.fallPhase || 0) + dt;
+    this.water.bump(fp[0], fp[2], 0.0011 * Math.sin(this.fallPhase * 21) + 0.0006 * Math.sin(this.fallPhase * 33 + 1.3), 0.045);
+    this.water.push(fp[0] + 0.05, fp[2], 0.0006, 0, 0.09);
     this.crateTimer += dt;
     if (this.crateTimer > 5) {
       this.crateTimer = 0;
@@ -417,6 +422,14 @@ class App {
     if (this.lid.a < -1 && rnd() < 10 * dt) {
       const C = LAYOUT.chest;
       P.spawn(4, v3.add(C, [rr(-0.07, 0.07), rr(0.1, 0.18), rr(-0.05, 0.05)]), [0, 0.05, 0], rr(0.35, 0.7), rr(0.018, 0.03), 0, [2.2, 1.7, 0.75], 0, 2);
+    }
+    // waterfall mist, spray and foam at the plunge
+    {
+      const fp = LAYOUT.fall.plunge, ft = LAYOUT.fall.top;
+      if (rnd() < 26 * dt * sc) P.spawn(6, [fp[0] + rr(-0.03, 0.03), 0.01, fp[2] + rr(-0.05, 0.05)], [rr(0.0, 0.6), rr(0.5, 1.3), rr(-0.4, 0.4)], rr(0.4, 0.7), rr(0.007, 0.012), 0.005, [0.95, 0.98, 1.0], 0.8, 0.6, -6, 2);
+      if (rnd() < 9 * dt * sc) P.spawn(3, [fp[0] + rr(-0.02, 0.04), 0.02, fp[2] + rr(-0.04, 0.04)], [rr(0.02, 0.12), rr(0.06, 0.16), rr(-0.05, 0.05)], rr(1.4, 2.2), 0.03, rr(0.1, 0.16), [0.95, 0.97, 1.0], 0.22, 0.8, 0.0);
+      if (rnd() < 3 * dt * sc) P.spawn(5, [fp[0] + rr(-0.04, 0.04), -rr(0.04, 0.14), fp[2] + rr(-0.05, 0.05)], [rr(-0.05, 0.05), 0.3, rr(-0.05, 0.05)], 1.2, rr(0.006, 0.012), 0.012, [0.85, 0.95, 1], 0.7, 2, 0.7, 1);
+      if (rnd() < 2 * dt * sc) P.spawn(6, [ft[0], ft[1], ft[2] + rr(-0.03, 0.03)], [rr(0.1, 0.3), rr(0.05, 0.2), rr(-0.1, 0.1)], 0.35, 0.006, 0.004, [0.95, 0.98, 1.0], 0.7, 0.6, -6, 2);
     }
     // spray from the bow in a chop
     const sp = Math.hypot(this.ship.v[0], this.ship.v[2]);

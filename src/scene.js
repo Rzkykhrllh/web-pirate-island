@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Procedural diorama geometry
 // ─────────────────────────────────────────────────────────────────────────────
-const MAT = { DEFAULT: 0, FLOOR: 1, TERRAIN: 2, STRATA: 3, GUMMY: 4, FROND: 5, TRUNK: 6, SAIL: 7, FLAG: 8, WINDOW: 9, LANTERN: 10, EMBER: 11, METAL: 12, GOLD: 13, GEM: 14, WOOD: 15, ROCK: 16, KELP: 18, GLASS: 19, HULL: 20, GRASS: 21, ROPE: 22, COAL: 23 };
+const MAT = { DEFAULT: 0, FLOOR: 1, TERRAIN: 2, STRATA: 3, GUMMY: 4, FROND: 5, TRUNK: 6, SAIL: 7, FLAG: 8, WINDOW: 9, LANTERN: 10, EMBER: 11, METAL: 12, GOLD: 13, GEM: 14, WOOD: 15, ROCK: 16, KELP: 18, GLASS: 19, HULL: 20, GRASS: 21, ROPE: 22, COAL: 23, FALL: 24 };
 const SLOT = { SHIP: 1, PALM0: 2, LID: 11, BALL: 16, NBALL: 40, BARREL: 56, NBARREL: 16, COIN: 72, NCOIN: 56, CHAIN: 128, NCHAIN: 34, CRATE: 168, NCRATE: 12, FRUIT: 180, NFRUIT: 40, TOTAL: 220 };
 
 const COL = {
@@ -573,13 +573,77 @@ function buildPalms(mb) {
     [-0.08, -1.3, 0.75, [0.16, 0.1]], [-0.78, -1.95, 0.9, [0.02, -0.06]], [-1.5, -0.72, 0.7, [-0.18, 0.12]],
     [0.2, -0.95, 0.66, [0.2, 0.14]], [-0.96, -0.64, 0.74, [0.22, 0.2]], [-1.62, -1.42, 0.78, [-0.12, -0.05]],
   ];
+  spots.push([-0.3, -1.12, 0.62, [0.14, 0.12]], [-1.02, -1.08, 0.66, [-0.12, 0.1]], [0.12, -1.32, 0.6, [0.16, -0.06]], [-0.62, -0.98, 0.58, [0.04, 0.16]]);
+  const slots = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15];
   LAYOUT.palms = [];
   spots.forEach(([x, z, h, lean], k) => {
-    const slot = SLOT.PALM0 + k;
+    const slot = slots[k];
     const { top } = buildPalm(mb, slot, h, lean, 500 + k * 77);
     const base = [x, H(x, z) - 0.01, z];
     LAYOUT.palms.push({ slot, base, h, lean, top: v3.add(base, top) });
   });
+}
+
+// waterfall: a ribbon that runs off the cliff-top ridge and plunges into the inlet
+function buildWaterfall(mb) {
+  const z0 = CLIFF[1];
+  const top = H(CLIFF[0] - 0.03, z0) + 0.012;
+  const xs = CLIFF[0] - 0.05, xe = CLIFF[0] + 0.055;
+  const N = 40;
+  const path = (v) => {
+    if (v < 0.18) { const s = v / 0.18; return [lerp(xs, xe, s), Math.max(top - 0.02 * s, H(lerp(xs, xe, s), z0) + 0.01)]; }
+    const s = (v - 0.18) / 0.82;
+    return [xe + 0.085 * Math.sin((s * Math.PI) / 2) + 0.025 * s, lerp(top - 0.02, -0.05, Math.pow(s, 1.55))];
+  };
+  mb.surf(8, N, (uu, vv) => {
+    const [x, y] = path(vv);
+    const w = lerp(0.05, 0.085, smoothstep(0.15, 1, vv));
+    const s = lerp(-1, 1, uu);
+    const bulge = 0.012 * (1 - s * s);
+    return { p: [x + bulge, y, z0 + s * w], uv: [uu, vv] };
+  }, { mat: MAT.FALL, col: [1, 1, 1] });
+  // a second, thinner veil in front for depth
+  mb.surf(6, N, (uu, vv) => {
+    const [x, y] = path(Math.max(vv, 0.2));
+    const w = lerp(0.03, 0.06, vv);
+    const s = lerp(-1, 1, uu);
+    return { p: [x + 0.012 + 0.008 * (1 - s * s), y - 0.004, z0 + 0.012 + s * w], uv: [uu * 0.7 + 0.15, vv] };
+  }, { mat: MAT.FALL, col: [1, 1, 1] });
+  // mossy lip stones
+  for (const dz of [-0.05, 0.05]) rock(mb, [CLIFF[0] - 0.01, top + 0.005, z0 + dz], 0.028, [0.5, 0.46, 0.4], 0.8);
+  LAYOUT.fall = { top: [xe, top, z0], plunge: [xe + 0.11, 0, z0] };
+}
+
+// extra jungle on the peak's ledges
+function buildLedgeJungle(mb) {
+  rngState = 6060;
+  const greens = [[0.2, 0.55, 0.17], [0.32, 0.66, 0.2], [0.16, 0.46, 0.18], [0.42, 0.64, 0.16]];
+  let placed = 0;
+  for (let k = 0; k < 900 && placed < 32; k++) {
+    const x = PEAK[0] + rr(-0.75, 1.15), z = PEAK[1] + rr(-0.6, 0.6);
+    const y = H(x, z), n = Hn(x, z);
+    if (y < 0.2 || n[1] < 0.8) continue;
+    if (Math.hypot(x - CLIFF[0], z - CLIFF[1]) < 0.12) continue;
+    placed++;
+    if (rnd() < 0.3 && n[1] > 0.88) {
+      const c = 2 + Math.floor(rnd() * 3);
+      for (let j = 0; j < c; j++) {
+        const a = rnd() * 6.28, r = rr(0, 0.04), s = rr(0.028, 0.05);
+        const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+        mb.sphere(m4.T(px, H(px, pz) + s * 0.45, pz), s, s * 0.85, s, 10, 7, greens[(j + k) % 4], MAT.GUMMY);
+      }
+    } else {
+      for (let j = 0; j < 6; j++) {
+        const th = (j / 6) * Math.PI * 2 + rnd(), L = rr(0.08, 0.12);
+        const dir = [Math.cos(th), 0, Math.sin(th)], side = [-Math.sin(th), 0, Math.cos(th)];
+        mb.surf(8, 2, (uu, vv) => {
+          const sv = lerp(-1, 1, vv);
+          const w = 0.22 * L * Math.sin(Math.PI * uu) * (0.6 + 0.4 * Math.abs(Math.sin(uu * 30)));
+          return { p: [x + dir[0] * uu * L + side[0] * w * sv, y + (0.9 * uu - 1.0 * uu * uu) * L, z + dir[2] * uu * L + side[2] * w * sv], uv: [uu, vv] };
+        }, { col: [0.24, 0.54, 0.17], mat: MAT.FROND, flex: 0 });
+      }
+    }
+  }
 }
 
 function buildMain() {
@@ -587,6 +651,8 @@ function buildMain() {
   buildTerrain(mb);
   buildVegetation(mb);
   buildPalms(mb);
+  buildWaterfall(mb);
+  buildLedgeJungle(mb);
   buildCamp(mb);
   buildChest(mb);
   buildBeachProps(mb);

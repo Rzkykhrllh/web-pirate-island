@@ -64,6 +64,7 @@ const M_HULL: u32 = 20u;
 const M_GRASS: u32 = 21u;
 const M_ROPE: u32 = 22u;
 const M_COAL: u32 = 23u;
+const M_FALL: u32 = 24u;
 
 const X_POS = vec2f(${f(L.xMark[0])}, ${f(L.xMark[1])});
 const SKULL_C = vec3f(${f(L.skull.c[0])}, ${f(L.skull.c[1])}, ${f(L.skull.c[2])});
@@ -366,7 +367,12 @@ fn terrainColor(p: vec3f, n: vec3f) -> vec3f {
   c = mix(c, sand * (0.94 + 0.08 * nz), smoothstep(0.005, 0.045, h));
   let mossMask = smoothstep(0.16, 0.26, h + (nz2 - 0.5) * 0.16) * smoothstep(0.3, 0.55, n.y);
   c = mix(c, moss * (0.85 + 0.25 * vnoise(p.xz * 40.0)), mossMask);
-  c = mix(c, rock * (0.85 + 0.3 * nz), smoothstep(0.42, 0.25, n.y) * smoothstep(0.08, 0.2, h));
+  let band = 0.5 + 0.5 * sin(h * 58.0 + nz2 * 5.0);
+  let rockC = mix(vec3f(0.56, 0.47, 0.38), vec3f(0.42, 0.35, 0.3), band) * (0.85 + 0.3 * nz);
+  c = mix(c, rockC, smoothstep(0.62, 0.38, n.y) * smoothstep(0.06, 0.18, h));
+  // wet dark streak on the cliff under the waterfall
+  let wetFall = exp(-pow((p.z - ${f(L.cliff[1])}) / 0.07, 2.0)) * smoothstep(${f(L.cliff[0] - 0.02)}, ${f(L.cliff[0] + 0.05)}, p.x) * smoothstep(0.5, 0.2, n.y);
+  c *= 1.0 - 0.35 * wetFall;
   // the X scored in the sand
   let q = p.xz - X_POS;
   let r = vec2f(q.x * 0.7071 - q.y * 0.7071, q.x * 0.7071 + q.y * 0.7071);
@@ -473,7 +479,7 @@ fn floorShade(w: vec3f, suv: vec2f) -> vec3f {
 @fragment fn fsMesh(i: VOut, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
   var n = normalize(i.nrm);
   // thin two-sided things face the viewer; closed meshes keep their authored normals
-  let twoSided = i.mat == M_SAIL || i.mat == M_FLAG || i.mat == M_FROND || i.mat == M_GRASS || i.mat == M_KELP;
+  let twoSided = i.mat == M_SAIL || i.mat == M_FLAG || i.mat == M_FROND || i.mat == M_GRASS || i.mat == M_KELP || i.mat == M_FALL;
   if (twoSided && dot(n, u.camPos.xyz - i.wpos) < 0.0) { n = -n; }
   if (!twoSided && !ff && i.mat == M_WOOD) { n = -n; }
   if (i.mat == M_FLOOR) { return vec4f(floorShade(i.wpos, i.clip.xy * u.res.zw), 1.0); }
@@ -536,6 +542,15 @@ fn floorShade(w: vec3f, suv: vec2f) -> vec3f {
       spec = 0.45; rough = 0.28;
     }
     case M_ROPE: { spec = 0.02; }
+    case M_FALL: {
+      let fv = i.uv.y; let fu = i.uv.x;
+      let st = vnoise(vec2f(fu * 16.0, fv * 7.0 - t * 2.6)) * 0.6 + vnoise(vec2f(fu * 38.0, fv * 18.0 - t * 4.4)) * 0.4;
+      let tint = u.scatter.rgb * 1.5 + vec3f(0.18);
+      alb = mix(tint, vec3f(0.96, 0.98, 1.0), smoothstep(0.42, 0.78, st));
+      alb = mix(alb, vec3f(1.0), smoothstep(0.86, 1.0, fv) + smoothstep(0.82, 1.0, abs(fu * 2.0 - 1.0)) * 0.6);
+      spec = 1.1; rough = 0.08; trans = 0.7;
+      emis = alb * (0.1 + 0.15 * night);
+    }
     default: {}
   }
   let lp = i.lpos;

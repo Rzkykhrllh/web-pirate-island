@@ -152,6 +152,17 @@ const rr = (a, b) => a + (b - a) * rnd();
 const IC = [-0.55, -0.85];                 // island centre
 const HUMP = [IC[0] - 0.2, IC[1] - 0.35];  // jungle hump
 const COVE = [IC[0] + 0.6, IC[1] + 0.74];  // bay facing the viewer
+const PEAK = [-0.66, -1.42];               // terraced rock peak
+const CLIFF = [0.4, -1.2];                 // east sea cliff where the waterfall drops
+function segDist(x, z, a, b) {
+  const px = x - a[0], pz = z - a[1], bx = b[0] - a[0], bz = b[1] - a[1];
+  const t = clamp((px * bx + pz * bz) / (bx * bx + bz * bz), 0, 1);
+  return [Math.hypot(px - bx * t, pz - bz * t), t];
+}
+function terrace(h, step) {
+  const q = h / step, f = q - Math.floor(q);
+  return (Math.floor(q) + smoothstep(0.62, 1.0, f)) * step;
+}
 function terrainRaw(x, z) {
   let h = -0.93 + (fbm2(x * 0.7 + 3.1, z * 0.7 - 1.7) - 0.5) * 0.24 + 0.05 * Math.sin(x * 1.3 + z * 0.7);
   const dx = x - IC[0], dz = z - IC[1];
@@ -162,8 +173,21 @@ function terrainRaw(x, z) {
   const s = Math.max(smoothstep(1.8, 0.86, r), spit * 0.7);
   const plateau = 0.11 + 0.05 * (fbm2(x * 2.1, z * 2.1) - 0.5);
   h = lerp(h, plateau, s);
-  const hr = ((x - HUMP[0]) ** 2) / 0.5 + ((z - HUMP[1]) ** 2) / 0.32;
-  h += 0.64 * Math.exp(-hr * 1.6) * (0.85 + 0.3 * fbm2(x * 3, z * 3));
+  // terraced rock peak with crags
+  const pr = Math.hypot((x - PEAK[0]) / 0.84, (z - PEAK[1]) / 0.64) * (1 + 0.14 * (vnoise2(x * 4 + 2, z * 4 - 1) - 0.5));
+  const crag = 0.82 + 0.3 * fbm2(x * 3.6, z * 3.6) + 0.1 * (1 - Math.abs(2 * vnoise2(x * 7, z * 7) - 1));
+  let mount = 1.42 * Math.pow(smoothstep(1.0, 0.0, pr), 0.95) * crag;
+  // ridge running east to the sea cliff
+  const [sd, st] = segDist(x, z, [PEAK[0] + 0.2, PEAK[1] + 0.04], CLIFF);
+  const ridge = lerp(1.0, 0.74, st) * smoothstep(0.26, 0.07, sd + 0.04 * (vnoise2(x * 9, z * 9) - 0.5));
+  mount = Math.max(mount, ridge);
+  if (mount > 0.02) {
+    const tr = terrace(mount, 0.13);
+    h = Math.max(h, plateau * 0.6 + lerp(mount, tr, 0.72) * (1 - 0.1 * plateau));
+  }
+  // deep inlet under the cliff for the waterfall to plunge into
+  const inlet = smoothstep(CLIFF[0] + 0.03, CLIFF[0] + 0.1, x) * Math.exp(-(((z - CLIFF[1]) / 0.3) ** 2)) * smoothstep(CLIFF[0] + 0.75, CLIFF[0] + 0.45, x);
+  if (inlet > 0) h = lerp(h, -0.42 - 0.08 * fbm2(x * 3, z * 3), inlet);
   // the cove
   const cr = Math.hypot(x - COVE[0], (z - COVE[1]) * 1.1);
   const cm = smoothstep(0.6, 0.28, cr);
@@ -199,6 +223,7 @@ const LAYOUT = {
   ship: [0.98, 0.04, 0.86],
   skull: { c: [-1.9, 0.38, -0.44], s: 0.36, yaw: Math.atan2(0.62, 0.78) },
   wreck: [-0.95, 1.4],
+  cliff: CLIFF,
   palms: [],
 };
 {
