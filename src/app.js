@@ -45,6 +45,10 @@ class App {
     for (let i = 0; i < SLOT.NFRUIT; i++) this.bodies.push(new Body(BT.FRUIT, SLOT.FRUIT + i));
     this.fruitCount = 0; this.crateTimer = 0;
     this.seedCrates();
+    this.rivals = 0;
+    this.scares = [];
+    this.initFish();
+    this.initEnemy();
     this.statics = this.buildColliders();
     this.cam = { yaw: Math.PI / 4, pitch: (27 * Math.PI) / 180, dist: 11.4, tYaw: Math.PI / 4, tPitch: (27 * Math.PI) / 180, tDist: 11.4 };
     this.t = 0; this.acc = 0;
@@ -86,23 +90,15 @@ class App {
   }
 
   // ── actions ──────────────────────────────────────────────────────────────
-  fireGun() {
-    const sh = this.ship;
-    const camL = this.camLocal();
-    const right = q4.rot(sh.q, [1, 0, 0]);
-    const side = v3.dot(right, v3.sub(camL, sh.p)) >= 0 ? 1 : -1;
-    const z = SHIP.guns[sh.gunIdx % SHIP.guns.length];
-    sh.gunIdx++;
-    const x = SHIP.halfAt(z, SHIP.gunY) + 0.05;
-    const muzzle = sh.world([side * x, SHIP.gunY, z]);
-    const dir = v3.norm(q4.rot(sh.q, [side, 0.0, 0]));
-    const flat = v3.norm([dir[0], 0, dir[2]]);
-    const ball = this.alloc(BT.BALL);
-    const vel = v3.add(v3.add(v3.mul(flat, rr(2.2, 2.7)), [0, rr(1.4, 1.75), 0]), v3.mul(sh.v, 1));
-    ball.spawn(v3.add(muzzle, v3.mul(flat, 0.04)), vel);
-    ball.noShip = 0.35;
-    sh.applyImpulse(v3.mul(flat, -0.11), sh.world([side * x, SHIP.gunY + 0.05, z]));
-    // flash + smoke
+  // ballistic launch velocity that lands on `target` from `from` (gravity G_BODY)
+  aimAt(from, target, vh) {
+    const d = [target[0] - from[0], 0, target[2] - from[2]];
+    const D = Math.hypot(d[0], d[2]) || 1;
+    const t = D / vh;
+    const vy = (target[1] - from[1] + 0.5 * G_BODY * t * t) / t;
+    return [(d[0] / D) * vh, vy, (d[2] / D) * vh];
+  }
+  gunEffects(muzzle, flat) {
     const P = this.parts;
     P.spawn(0, muzzle, v3.mul(flat, 0.3), 0.14, 0.11, 0.2, [3.2, 2.0, 0.8], 0, 4);
     for (let k = 0; k < 6; k++) P.spawn(1, v3.add(muzzle, v3.mul(flat, 0.02 * k)), v3.add(v3.mul(flat, rr(0.8, 1.8)), [rr(-0.1, 0.1), rr(0, 0.2), rr(-0.1, 0.1)]), rr(0.08, 0.16), 0.03, 0.05, [2.6, 1.2, 0.35], 0, 6);
@@ -111,7 +107,40 @@ class App {
       const v = v3.add(v3.mul(flat, rr(0.3, 1.5)), [rr(-0.12, 0.12), rr(0.02, 0.2), rr(-0.12, 0.12)]);
       P.spawn(3, v3.add(muzzle, v3.mul(flat, rr(0, 0.08))), v, rr(2.2, 3.4), rr(0.025, 0.04), rr(0.11, 0.18), [0.96, 0.95, 0.93], rr(0.35, 0.5), 1.6, 0.06);
     }
-    this.water.bump(muzzle[0] + flat[0] * 0.25, muzzle[2] + flat[2] * 0.25, -0.012, 0.12);
+    if (Math.abs(muzzle[0]) < HALF && Math.abs(muzzle[2]) < HALF) this.water.bump(muzzle[0] + flat[0] * 0.25, muzzle[2] + flat[2] * 0.25, -0.012, 0.12);
+  }
+  fireGun() {
+    const sh = this.ship, E = this.enemy;
+    const right = q4.rot(sh.q, [1, 0, 0]);
+    // aim at the rival when she is in range, otherwise fire the side facing the viewer
+    let target = null;
+    if (E.state === 'sail' && Math.hypot(E.p[0] - sh.p[0], E.p[2] - sh.p[2]) < 3.2) target = E;
+    const camL = this.camLocal();
+    const toward = target ? v3.sub(target.p, sh.p) : v3.sub(camL, sh.p);
+    const side = v3.dot(right, toward) >= 0 ? 1 : -1;
+    const z = SHIP.guns[sh.gunIdx % SHIP.guns.length];
+    sh.gunIdx++;
+    const x = SHIP.halfAt(z, SHIP.gunY) + 0.05;
+    const muzzle = sh.world([side * x, SHIP.gunY, z]);
+    const dir = v3.norm(q4.rot(sh.q, [side, 0.0, 0]));
+    let flat = v3.norm([dir[0], 0, dir[2]]);
+    const ball = this.alloc(BT.BALL);
+    const start = v3.add(muzzle, v3.mul(flat, 0.04));
+    let vel;
+    if (target) {
+      const D = Math.hypot(target.p[0] - start[0], target.p[2] - start[2]);
+      const vh = clamp(D / 0.85, 2.0, 3.8);
+      const lead = v3.add(target.p, v3.mul(target.v, D / vh));
+      const err = 0.05 + 0.05 * D;
+      vel = this.aimAt(start, [lead[0] + rr(-err, err), lead[1] + 0.06, lead[2] + rr(-err, err)], vh);
+      flat = v3.norm([vel[0], 0, vel[2]]);
+    } else {
+      vel = v3.add(v3.add(v3.mul(flat, rr(2.2, 2.7)), [0, rr(1.4, 1.75), 0]), v3.mul(sh.v, 1));
+    }
+    ball.spawn(start, vel);
+    ball.noShip = 0.35; ball.enemyShot = false;
+    sh.applyImpulse(v3.mul(flat, -0.11), sh.world([side * x, SHIP.gunY + 0.05, z]));
+    this.gunEffects(muzzle, flat);
     this.shots++;
     this.block.impulse(-flat[0] * 0.02, -flat[2] * 0.02, 0.01);
   }
@@ -193,6 +222,154 @@ class App {
     for (let k = 0; k < 10; k++) this.parts.spawn(4, v3.add(f.p, [rr(-0.03, 0.03), rr(0, 0.06), rr(-0.03, 0.03)]), [rr(-0.2, 0.2), rr(0.2, 0.6), rr(-0.2, 0.2)], rr(0.3, 0.6), rr(0.02, 0.035), 0, [2.4, 1.4, 0.5], 0, 2);
     this.parts.spawn(0, f.p, [0, 0.3, 0], 0.25, 0.05, 0.12, [1.6, 0.9, 0.3], 0, 3);
   }
+  // ── gummy fish ────────────────────────────────────────────────────────────
+  initFish() {
+    rngState = 4711;
+    const schools = [
+      { c: [1.6, -0.36, 1.6], r: 0.6, w: 0.22, col: [1.0, 0.45, 0.1] },
+      { c: [-1.4, -0.34, 2.0], r: 0.5, w: -0.27, col: [1.0, 0.82, 0.1] },
+      { c: [2.6, -0.32, -0.6], r: 0.45, w: 0.3, col: [1.0, 0.3, 0.55] },
+      { c: [0.2, -0.3, 2.7], r: 0.65, w: -0.2, col: [0.45, 0.95, 0.25] },
+    ];
+    this.schools = schools;
+    this.fish = [];
+    for (let i = 0; i < SLOT.NFISH; i++) {
+      const s = schools[i % schools.length];
+      const off = [rr(-0.2, 0.2), rr(-0.08, 0.08), rr(-0.2, 0.2)];
+      const p = v3.add(s.c, [s.r + off[0], off[1], off[2]]);
+      const tint = s.col.map((c) => clamp(c * rr(0.85, 1.1), 0, 1));
+      this.fish.push({ s, off, p, v: [0, 0, 0.2], f: [0, 0, 1], tint, ph: rnd() * 6.28, speed: 0 });
+    }
+  }
+  updateFish(dt) {
+    const t = this.t || 0;
+    this.scares = this.scares.filter((sc) => t - sc.t < 2.5);
+    for (const fsh of this.fish) {
+      const s = fsh.s;
+      const a = t * s.w + fsh.ph * 0.05;
+      const ctr = [s.c[0] + Math.cos(a) * s.r, s.c[1] + 0.08 * Math.sin(t * 0.7 + fsh.ph), s.c[2] + Math.sin(a) * s.r];
+      const ca = Math.cos(t * 0.4 + fsh.ph), sa = Math.sin(t * 0.4 + fsh.ph);
+      const tgt = v3.add(ctr, [fsh.off[0] * ca - fsh.off[2] * sa, fsh.off[1], fsh.off[0] * sa + fsh.off[2] * ca]);
+      let acc = v3.mul(v3.sub(tgt, fsh.p), 2.2);
+      for (const sc of this.scares) {
+        const d = v3.sub(fsh.p, sc.p), L = v3.len(d);
+        if (L < 0.9 && L > 1e-4) acc = v3.add(acc, v3.mul(d, ((0.9 - L) / L) * 26 * sc.s * (1 - (t - sc.t) / 2.5)));
+      }
+      acc = v3.sub(acc, v3.mul(fsh.v, 1.4));
+      fsh.v = v3.add(fsh.v, v3.mul(acc, dt));
+      let sp = v3.len(fsh.v);
+      if (sp > 1.4) { fsh.v = v3.mul(fsh.v, 1.4 / sp); sp = 1.4; }
+      fsh.p = v3.add(fsh.p, v3.mul(fsh.v, dt));
+      const floor = H(fsh.p[0], fsh.p[2]) + 0.07, ceil = this.water.etaAt(fsh.p[0], fsh.p[2]) - 0.06;
+      if (fsh.p[1] < floor) { fsh.p[1] = floor; fsh.v[1] = Math.abs(fsh.v[1]); }
+      if (fsh.p[1] > ceil) { fsh.p[1] = ceil; fsh.v[1] = -Math.abs(fsh.v[1]); }
+      for (const ax of [0, 2]) if (Math.abs(fsh.p[ax]) > HALF - 0.08) { fsh.p[ax] = Math.sign(fsh.p[ax]) * (HALF - 0.08); fsh.v[ax] *= -0.5; }
+      if (sp > 0.03) fsh.f = v3.norm(v3.lerp(fsh.f, v3.mul(fsh.v, 1 / sp), 1 - Math.exp(-8 * dt)));
+      fsh.speed = lerp(fsh.speed, clamp(sp / 1.2, 0, 1), 1 - Math.exp(-4 * dt));
+    }
+  }
+  // ── the rival ship ────────────────────────────────────────────────────────
+  initEnemy() {
+    this.enemyPath = [[2.75, -0.9], [2.95, 1.0], [2.4, 2.75], [0.6, 2.95], [-1.0, 2.55], [-1.75, 1.55], [-1.85, 0.55], [-0.6, 0.6], [0.45, 0.2], [1.7, -0.35]];
+    this.enemy = { state: 'sail', s: 2.2, p: [0, 0, 0], v: [0, 0, 0], yaw: 0, pitch: 0, roll: 0, list: 0, hp: 3, timer: 0, fireT: 6, flash: 0, sink: 0 };
+    this.placeEnemy(0);
+  }
+  pathAt(s) {
+    const W = this.enemyPath, n = W.length;
+    const i = ((Math.floor(s) % n) + n) % n, t = s - Math.floor(s);
+    const p0 = W[(i - 1 + n) % n], p1 = W[i], p2 = W[(i + 1) % n], p3 = W[(i + 2) % n];
+    const t2 = t * t, t3 = t2 * t;
+    return [0, 1].map((k) => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3));
+  }
+  placeEnemy(dt) {
+    const E = this.enemy, W = this.water;
+    const a = this.pathAt(E.s), b = this.pathAt(E.s + 0.02);
+    const f = v3.norm([b[0] - a[0], 0, b[1] - a[1]]);
+    const yaw = Math.atan2(f[0], f[2]);
+    let dy = yaw - E.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    E.yaw += dy * (dt > 0 ? 1 - Math.exp(-3 * dt) : 1);
+    const fw = [Math.sin(E.yaw), 0, Math.cos(E.yaw)], rt = [fw[2], 0, -fw[0]];
+    const L = 0.36, B = 0.11;
+    const s = (x, z) => W.surfaceAt(x, z);
+    const bow = s(a[0] + fw[0] * L, a[1] + fw[2] * L), stern = s(a[0] - fw[0] * L, a[1] - fw[2] * L);
+    const port = s(a[0] - rt[0] * B, a[1] - rt[2] * B), stbd = s(a[0] + rt[0] * B, a[1] + rt[2] * B);
+    const sinkY = -0.6 * smoothstep(0, 1, E.sink);
+    const np = [a[0], (bow + stern + port + stbd) / 4 - 0.005 + sinkY, a[1]];
+    if (dt > 0) E.v = v3.mul(v3.sub(np, E.p), 1 / dt);
+    E.p = np;
+    const k = dt > 0 ? 1 - Math.exp(-5 * dt) : 1;
+    E.pitch = lerp(E.pitch, Math.atan2(bow - stern, 2 * L) + 0.35 * E.sink, k);
+    E.roll = lerp(E.roll, Math.atan2(stbd - port, 2 * B) * 0.6 + E.list + 0.03 * Math.sin((this.t || 0) * 1.3), k);
+  }
+  enemyColliders() {
+    const E = this.enemy, fw = [Math.sin(E.yaw), 0, Math.cos(E.yaw)];
+    return [-0.28, 0, 0.28].map((d) => [v3.add(E.p, [fw[0] * d, 0.02, fw[2] * d]), 0.12]);
+  }
+  hitEnemy(ball) {
+    const E = this.enemy, P = this.parts, p = ball.p;
+    E.hp--; E.flash = 1; E.list += 0.07 * (rnd() < 0.5 ? -1 : 1);
+    for (let k = 0; k < 18; k++) P.spawn(2, p, [rr(-1, 1), rr(0.3, 1.5), rr(-1, 1)], rr(0.25, 0.6), 0.009, 0.003, [3, 1.6, 0.5], 0, 2, -4);
+    for (let k = 0; k < 14; k++) P.spawn(6, p, [rr(-1.0, 1.0), rr(0.5, 1.6), rr(-1.0, 1.0)], rr(0.6, 1.0), rr(0.008, 0.015), 0.008, rnd() < 0.5 ? [0.35, 0.22, 0.12] : [0.12, 0.1, 0.09], 1, 0.4, -7, 2);
+    for (let k = 0; k < 7; k++) P.spawn(3, p, [rr(-0.2, 0.2), rr(0.1, 0.35), rr(-0.2, 0.2)], rr(1.5, 2.6), 0.03, 0.14, [0.45, 0.42, 0.4], 0.45, 1.2, 0.04);
+    P.spawn(0, p, [0, 0.2, 0], 0.2, 0.08, 0.22, [3, 1.8, 0.7], 0, 4);
+    ball.v = v3.mul(ball.v, 0.15);
+    this.block.impulse(rr(-1, 1) * 0.01, rr(-1, 1) * 0.01, -0.012);
+    if (E.hp <= 0) this.sinkEnemy();
+  }
+  sinkEnemy() {
+    const E = this.enemy;
+    E.state = 'sinking'; E.timer = 0; this.rivals++;
+    E.list = (E.list >= 0 ? 1 : -1) * 0.5;
+    for (let k = 0; k < 2; k++) { const c = this.alloc(BT.CRATE); c.spawn(v3.add(E.p, [rr(-0.15, 0.15), 0.25, rr(-0.15, 0.15)]), [rr(-0.4, 0.4), 1.2, rr(-0.4, 0.4)]); }
+    for (let k = 0; k < 4; k++) { const c = this.alloc(BT.COIN); c.spawn(v3.add(E.p, [rr(-0.1, 0.1), 0.2, rr(-0.1, 0.1)]), [rr(-0.6, 0.6), rr(1.2, 1.8), rr(-0.6, 0.6)]); }
+    this.splash([E.p[0], 0, E.p[2]], 1.2, true);
+  }
+  updateEnemy(dt) {
+    const E = this.enemy, P = this.parts, W = this.water;
+    E.flash = Math.max(0, E.flash - dt * 3);
+    if (E.state === 'gone') {
+      E.timer += dt;
+      if (E.timer > 7) { E.state = 'sail'; E.hp = 3; E.sink = 0; E.list = 0; E.s = (E.s + 4.5) % this.enemyPath.length; this.placeEnemy(0); E.fireT = 6; }
+      return;
+    }
+    if (E.state === 'sail') {
+      E.s = (E.s + dt * 0.09) % this.enemyPath.length;
+      E.list *= Math.exp(-0.15 * dt);
+      // the rival returns fire now and then, aiming close to your ship
+      const sh = this.ship;
+      const dist = Math.hypot(sh.p[0] - E.p[0], sh.p[2] - E.p[2]);
+      E.fireT -= dt;
+      if (E.fireT <= 0 && dist < 2.7) {
+        E.fireT = rr(6, 10);
+        const fw = [Math.sin(E.yaw), 0, Math.cos(E.yaw)], rt = [fw[2], 0, -fw[0]];
+        const side = v3.dot(rt, v3.sub(sh.p, E.p)) >= 0 ? 1 : -1;
+        const muzzle = v3.add(E.p, [rt[0] * side * 0.12 + fw[0] * rr(-0.12, 0.12), 0.04, rt[2] * side * 0.12 + fw[2] * rr(-0.12, 0.12)]);
+        const miss = [rr(-0.35, 0.35), 0, rr(-0.35, 0.35)];
+        const vh = clamp(dist / 0.9, 2.0, 3.4);
+        const vel = this.aimAt(muzzle, v3.add(sh.p, miss), vh);
+        const b = this.alloc(BT.BALL);
+        b.spawn(muzzle, vel); b.enemyShot = true; b.noEnemy = 0.4; b.noShip = 0;
+        this.gunEffects(muzzle, v3.norm([vel[0], 0, vel[2]]));
+      }
+      // bow spray and a mass-neutral wake
+      const fw = [Math.sin(E.yaw), 0, Math.cos(E.yaw)];
+      const bow = v3.add(E.p, v3.mul(fw, 0.3)), stern = v3.add(E.p, v3.mul(fw, -0.3));
+      W.bump(bow[0], bow[2], 0.0016, 0.06); W.bump(stern[0], stern[2], -0.0016, 0.07);
+      W.push(E.p[0], E.p[2], fw[0] * 0.004, fw[2] * 0.004, 0.08);
+      if (rnd() < 10 * dt * P.scale) P.spawn(6, [bow[0], 0.01, bow[2]], [rr(-0.3, 0.3), rr(0.3, 0.7), rr(-0.3, 0.3)], 0.5, 0.008, 0.005, [0.95, 0.98, 1], 0.8, 0.6, -6, 2);
+      // keep clear of your ship
+      const d = v3.sub(sh.p, E.p); d[1] = 0;
+      const dl = v3.len(d);
+      if (dl < 0.5 && dl > 1e-4) sh.v = v3.add(sh.v, v3.mul(d, ((0.5 - dl) / dl) * 6 * dt));
+    } else if (E.state === 'sinking') {
+      E.timer += dt;
+      E.sink = Math.min(1, E.timer / 7);
+      if (rnd() < 18 * dt * P.scale) P.spawn(5, [E.p[0] + rr(-0.2, 0.2), Math.min(E.p[1], -0.02) - rr(0, 0.1), E.p[2] + rr(-0.2, 0.2)], [rr(-0.05, 0.05), 0.35, rr(-0.05, 0.05)], 1.4, rr(0.008, 0.018), 0.016, [0.85, 0.95, 1], 0.7, 2, 0.7, 1);
+      if (rnd() < 5 * dt * P.scale && E.timer < 4) P.spawn(3, v3.add(E.p, [rr(-0.1, 0.1), 0.25, rr(-0.1, 0.1)]), [rr(-0.05, 0.05), rr(0.12, 0.22), rr(-0.05, 0.05)], 3, 0.04, 0.18, [0.3, 0.3, 0.32], 0.35, 0.5, 0.02);
+      if (E.timer > 10) { E.state = 'gone'; E.timer = 0; }
+    }
+    this.placeEnemy(dt);
+  }
   alloc(type) {
     let best = null, oldest = -1;
     for (const b of this.bodies) {
@@ -208,6 +385,8 @@ class App {
     this.parts.clear();
     this.fruitCount = 0; this.crateTimer = 0;
     this.seedCrates();
+    this.rivals = 0; this.scares = [];
+    this.initFish(); this.initEnemy();
     this.shots = 0; this.lid.open = false; this.fireBoost = 0;
     for (const p of this.palmBend) { p.b = [0, 0]; p.v = [0, 0]; p.target = null; }
   }
@@ -216,6 +395,7 @@ class App {
   // ── simulation ───────────────────────────────────────────────────────────
   splash(p, strength, isBall) {
     const W = this.water, P = this.parts;
+    this.scares.push({ p: [p[0], p[1] - 0.2, p[2]], t: this.t, s: Math.min(strength, 1.5) });
     W.bump(p[0], p[2], -0.032 * strength, isBall ? 0.06 : 0.05);
     W.bump(p[0], p[2], 0.012 * strength, isBall ? 0.13 : 0.1);
     const n = Math.round((isBall ? 26 : 10) * Math.min(strength, 1.6) * this.parts.scale);
@@ -294,6 +474,16 @@ class App {
       }
       if (b.noShip > 0) b.noShip -= dt;
       else for (const [c, r] of shipCol) this.pushOut(b, c, r, sh);
+      if (b.noEnemy > 0) b.noEnemy -= dt;
+      else if (this.enemy.state !== 'gone') for (const [c, r] of this.enemyColliders()) {
+        const d = v3.sub(b.p, c), L = v3.len(d), R = r + b.r;
+        if (L >= R || L < 1e-6) continue;
+        const n = v3.mul(d, 1 / L);
+        const vn = v3.dot(v3.sub(b.v, this.enemy.v), n);
+        if (b.type === BT.BALL && !b.enemyShot && vn < -1.0 && this.enemy.state === 'sail') this.hitEnemy(b);
+        b.p = v3.add(c, v3.mul(n, R));
+        if (vn < 0) b.v = v3.sub(b.v, v3.mul(n, (1 + b.spec.e) * vn * (b.type === BT.BALL ? 0.6 : 1)));
+      }
       // block walls
       for (const a of [0, 2]) {
         if (Math.abs(b.p[a]) > HALF - b.r) { b.p[a] = Math.sign(b.p[a]) * (HALF - b.r); if (b.v[a] * b.p[a] > 0) b.v[a] *= -0.35; }
@@ -471,6 +661,15 @@ class App {
         }
       }
     }
+    if (this.beam && this.beam.I > 0.01) {
+      const B = this.beam, I = B.I;
+      S.push([B.p[0], B.p[1], B.p[2], 0.09, 1.2 * I, 1.0 * I, 0.7 * I, 0, 0, 0, 0.2]);
+      for (let k = 0; k < 34; k++) {
+        const d = 0.06 + k * 0.085, f = Math.pow(1 - k / 34, 1.4);
+        const q = v3.add(B.p, v3.mul(B.d, d));
+        S.push([q[0], q[1], q[2], 0.05 + d * 0.13, 0.11 * f * I, 0.095 * f * I, 0.07 * f * I, 0, 0, 0, 0]);
+      }
+    }
     for (const b of this.bubbles) {
       const y = b[1] + 0.006 * Math.sin(t * 1.3 + b[4]);
       const a = 0.55;
@@ -496,6 +695,8 @@ class App {
       while (this.acc >= h && n < 10) { this.step(h); this.acc -= h; n++; }
       if (n >= 10) this.acc = 0;
       this.tod = todSample(this.params.tod);
+      this.updateFish(dt);
+      this.updateEnemy(dt);
       this.emit(dt);
       this.parts.update(dt, this.water, this.windVec);
     }
@@ -551,6 +752,15 @@ class App {
     const wl = Math.hypot(this.windVec[0], this.windVec[1]) || 1;
     U.set([this.windVec[0] / wl, this.windVec[1] / wl, wl * 2.5, 0], 136);
     U.set([proj[0], proj[5], near, far], 140);
+    {
+      const lampW = m4.pt(blockM, LAYOUT.lamp);
+      const a = this.t * 0.9;
+      const dl = v3.norm([Math.cos(a), -0.1, Math.sin(a)]);
+      const bd = m4.dir(blockM, dl);
+      this.beam = { p: LAYOUT.lamp, d: dl, I: smoothstep(0.35, 0.8, td.night) };
+      U.set([lampW[0], lampW[1], lampW[2], this.beam.I * 2.6], 144);
+      U.set([bd[0], bd[1], bd[2], 0], 148);
+    }
     // objects
     R.setObj(SLOT.SHIP, q4.mat(this.ship.q, this.ship.p));
     LAYOUT.palms.forEach((p, k) => {
@@ -564,6 +774,15 @@ class App {
     const hg = LAYOUT.chestHinge;
     R.setObj(SLOT.LID, m4.chain(LAYOUT.chestM, m4.T(hg[0], hg[1], hg[2]), m4.RX(this.lid.a), m4.T(0, 0, -hg[2])));
     for (const b of this.bodies) R.setObj(b.slot, b.matrix());
+    this.fish.forEach((fsh, i) => {
+      const f = fsh.f, x = v3.norm(v3.cross([0, 1, 0], f)), y = v3.cross(f, x);
+      R.setObj(SLOT.FISH + i, m4.basis(x, y, f, fsh.p), [fsh.tint[0], fsh.tint[1], fsh.tint[2], fsh.speed]);
+    });
+    {
+      const E = this.enemy;
+      const m = E.state === 'gone' ? m4.S(0) : m4.chain(m4.T(E.p[0], E.p[1], E.p[2]), m4.RY(E.yaw), m4.RX(-E.pitch), m4.RZ(E.roll), m4.S(0.78));
+      R.setObj(SLOT.ENEMY, m);
+    }
     // anchor chain: a sagging curve from the bow to the anchor
     const bow = this.ship.world([0.06, 0.08, 0.5]), A = LAYOUT.anchorRing;
     const span = v3.len(v3.sub(A, bow));

@@ -78,7 +78,7 @@ async function boot() {
 
   // ── UI ────────────────────────────────────────────────────────────────────
   const ui = {
-    lively: $('lively'), fruit: $('tFruit'), shots: $('tShots'), afloat: $('tAfloat'), sunk: $('tSunk'), todName: $('todName'),
+    lively: $('lively'), fruit: $('tFruit'), rivals: $('tRivals'), shots: $('tShots'), afloat: $('tAfloat'), sunk: $('tSunk'), todName: $('todName'),
   };
   $('btnFire').addEventListener('click', () => app.fireGun());
   $('btnCoins').addEventListener('click', () => app.dropCoins());
@@ -303,7 +303,7 @@ async function boot() {
         if (b.sub > 0.05 && b.sub < 0.97 && !b.grounded) afloat++;
         else if (b.sub >= 0.97 && b.grounded && v3.len(b.v) < 0.3) sunk++;
       }
-      ui.shots.textContent = app.shots; ui.afloat.textContent = afloat; ui.sunk.textContent = sunk; ui.fruit.textContent = app.fruitCount;
+      ui.shots.textContent = app.shots; ui.afloat.textContent = afloat; ui.sunk.textContent = sunk; ui.fruit.textContent = app.fruitCount; ui.rivals.textContent = app.rivals;
       const night = app.tod.night > 0.5;
       if (night !== wasNight) { document.documentElement.classList.toggle('night', night); wasNight = night; }
     }

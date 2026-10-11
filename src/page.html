@@ -96,10 +96,10 @@ button.primary:hover { background: color-mix(in srgb, var(--accent) 86%, #000); 
 .label output { letter-spacing: 0.04em; text-transform: none; color: var(--ink); font-weight: 500; }
 .track { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
 .fill { height: 100%; width: 100%; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), var(--accent)); transform-origin: left; transform: scaleX(0); transition: transform 0.12s linear; }
-.tally { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tally { margin: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .tally div { display: grid; gap: 3px; }
-.tally dt { font: 600 10px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
-.tally dd { margin: 0; font: 400 30px/1 var(--display); font-variant-numeric: tabular-nums lining-nums; }
+.tally dt { font: 600 9.5px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+.tally dd { margin: 0; font: 400 26px/1 var(--display); font-variant-numeric: tabular-nums lining-nums; }
 .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .swatches button { display: grid; justify-items: center; gap: 7px; padding: 10px 4px 9px; }
 .swatches button[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -189,6 +189,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
       <div><dt>Afloat</dt><dd id="tAfloat">0</dd></div>
       <div><dt>Sunk</dt><dd id="tSunk">0</dd></div>
       <div><dt>Fruit</dt><dd id="tFruit">0</dd></div>
+      <div><dt>Rivals</dt><dd id="tRivals">0</dd></div>
     </dl>
   </section>
   <section>
@@ -229,6 +230,7 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius
     <li>Tap the X · dig</li>
     <li>Tap or shoot a crate · smash</li>
     <li>Tap fruit · collect</li>
+    <li>Rival in range · guns aim at her</li>
     <li>Grab balls, barrels, coins · throw</li>
     <li>Drag a palm · bend</li>
     <li>Drag empty space or right-drag · orbit</li>

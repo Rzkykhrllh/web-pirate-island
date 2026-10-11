@@ -26,6 +26,8 @@ struct U {
   misc: vec4f,     // gridN, half, dx, reducedMotion
   wind: vec4f,     // dir.x, dir.z, strength, unused
   proj: vec4f,     // p00, p11, near, far
+  beamPos: vec4f,  // lighthouse lamp (world), w: intensity
+  beamDir: vec4f,  // beam direction (world)
 };
 struct Obj { m: mat4x4f, bend: vec4f };
 
@@ -65,6 +67,7 @@ const M_GRASS: u32 = 21u;
 const M_ROPE: u32 = 22u;
 const M_COAL: u32 = 23u;
 const M_FALL: u32 = 24u;
+const M_FISH: u32 = 25u;
 
 const X_POS = vec2f(${f(L.xMark[0])}, ${f(L.xMark[1])});
 const SKULL_C = vec3f(${f(L.skull.c[0])}, ${f(L.skull.c[1])}, ${f(L.skull.c[2])});
@@ -261,6 +264,15 @@ fn shade(w: vec3f, lp: vec3f, n: vec3f, alb: vec3f, rough: f32, spec: f32, trans
   let fi = fireStrength() / (1.0 + d2 * 7.0);
   col += alb * FIRE_COL * fi * (max(dot(n, Lf), 0.0) + trans * max(-dot(n, Lf), 0.0) * 0.8 + 0.08);
   col += FIRE_COL * fi * pow(max(dot(n, normalize(Lf + V)), 0.0), shin * 0.5) * spec * 0.8;
+  // lighthouse beam (spot light, night only)
+  if (u.beamPos.w > 0.001) {
+    let bd = w - u.beamPos.xyz; let bl = max(length(bd), 1e-4); let bn = bd / bl;
+    let cone = smoothstep(0.972, 0.994, dot(bn, u.beamDir.xyz));
+    if (cone > 0.0) {
+      let att = u.beamPos.w * cone / (1.0 + bl * bl * 0.35);
+      col += alb * vec3f(1.0, 0.9, 0.7) * att * (max(dot(n, -bn), 0.0) + trans * 0.5 + 0.15);
+    }
+  }
   // caustics underwater
   if (inBlock(lp)) {
     let eta = etaAt(lp.xz);
@@ -293,21 +305,29 @@ struct VOut {
   @location(5) @interpolate(flat) mat: u32,
   @location(6) misc: vec2f,
 };
-struct DV { p: vec3f, n: vec3f, mat: u32 };
+struct DV { p: vec3f, n: vec3f, mat: u32, tint: vec3f };
 
 fn deformVertex(inp: VIn, inst: u32) -> DV {
   let oi = u32(inp.ex.y + 0.5) + inst;
   let o = objs[oi];
-  var p = (o.m * vec4f(inp.pos, 1.0)).xyz;
-  var n = (o.m * vec4f(inp.nrm, 0.0)).xyz;
-  let nl = length(n);
-  n = select(vec3f(0.0, 1.0, 0.0), n / nl, nl > 1e-6);
   let fl = inp.ex.z;
   let mat = u32(inp.ex.x + 0.5);
   let t = u.camPos.w;
   let rm = 1.0 - u.misc.w * 0.7;
+  var lp0 = inp.pos;
+  var tint = vec3f(1.0);
+  var b = vec2f(o.bend.x, o.bend.z);
+  if (mat == M_FISH) {
+    // tail wiggle in fish space; bend carries the school colour, w the swim speed
+    lp0.x += sin(t * (10.0 + o.bend.w * 14.0) + f32(oi) * 1.7) * 0.022 * fl * fl * rm;
+    tint = o.bend.xyz;
+    b = vec2f(0.0);
+  }
+  var p = (o.m * vec4f(lp0, 1.0)).xyz;
+  var n = (o.m * vec4f(inp.nrm, 0.0)).xyz;
+  let nl = length(n);
+  n = select(vec3f(0.0, 1.0, 0.0), n / nl, nl > 1e-6);
   // palm bend (per-object), keeps arc length roughly
-  let b = vec2f(o.bend.x, o.bend.z);
   p += vec3f(b.x, 0.0, b.y) * fl * fl;
   p.y -= dot(b, b) * fl * fl * 0.55;
   let seed = o.m[3].x * 7.0 + o.m[3].z * 13.0;
@@ -332,7 +352,7 @@ fn deformVertex(inp: VIn, inst: u32) -> DV {
     p += n * (sin(t * 8.0 - a * 9.0) * 0.024 + sin(t * 13.0 - a * 16.0) * 0.007) * a * rm;
   }
   if (mat != M_FLOOR) { p = wobblePos(p); }
-  return DV(p, n, mat);
+  return DV(p, n, mat, tint);
 }
 
 @vertex fn vsMesh(inp: VIn, @builtin(instance_index) inst: u32) -> VOut {
@@ -341,7 +361,7 @@ fn deformVertex(inp: VIn, inst: u32) -> DV {
   if (d.mat != M_FLOOR) { w = toWorld(d.p); n = toWorldN(d.n); }
   var o: VOut;
   o.clip = u.viewProj * vec4f(w, 1.0);
-  o.wpos = w; o.lpos = d.p; o.nrm = n; o.col = inp.col; o.uv = inp.uv; o.mat = d.mat;
+  o.wpos = w; o.lpos = d.p; o.nrm = n; o.col = inp.col * d.tint; o.uv = inp.uv; o.mat = d.mat;
   o.misc = vec2f(inp.ex.z, f32(u32(inp.ex.y + 0.5) + inst));
   return o;
 }
@@ -542,6 +562,7 @@ fn floorShade(w: vec3f, suv: vec2f) -> vec3f {
       spec = 0.45; rough = 0.28;
     }
     case M_ROPE: { spec = 0.02; }
+    case M_FISH: { spec = 0.9; rough = 0.12; trans = 0.8; emis = alb * (0.22 + 0.25 * night); }
     case M_FALL: {
       let fv = i.uv.y; let fu = i.uv.x;
       let st = vnoise(vec2f(fu * 16.0, fv * 7.0 - t * 2.6)) * 0.6 + vnoise(vec2f(fu * 38.0, fv * 18.0 - t * 4.4)) * 0.4;
@@ -823,6 +844,11 @@ fn screenUV(w: vec3f) -> vec2f {
   let Lf = normalize(fd);
   col += FIRE_COL * fi * pow(max(dot(n, normalize(Lf + V)), 0.0), 120.0) * 4.0;
   col += u.surfCol.rgb * 0.04;
+  if (u.beamPos.w > 0.001) {
+    let bd = w - u.beamPos.xyz; let bl = max(length(bd), 1e-4);
+    let cone = smoothstep(0.972, 0.994, dot(bd / bl, u.beamDir.xyz));
+    col += vec3f(1.0, 0.9, 0.7) * u.beamPos.w * cone / (1.0 + bl * bl * 0.35) * 0.55;
+  }
   let lit = key * max(dot(n, L), 0.0) * 0.8 + u.ambTop.rgb + FIRE_COL * fi * 0.8;
   if (isTop) {
     // shoreline foam lace

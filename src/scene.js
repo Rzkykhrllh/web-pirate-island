@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Procedural diorama geometry
 // ─────────────────────────────────────────────────────────────────────────────
-const MAT = { DEFAULT: 0, FLOOR: 1, TERRAIN: 2, STRATA: 3, GUMMY: 4, FROND: 5, TRUNK: 6, SAIL: 7, FLAG: 8, WINDOW: 9, LANTERN: 10, EMBER: 11, METAL: 12, GOLD: 13, GEM: 14, WOOD: 15, ROCK: 16, KELP: 18, GLASS: 19, HULL: 20, GRASS: 21, ROPE: 22, COAL: 23, FALL: 24 };
-const SLOT = { SHIP: 1, PALM0: 2, LID: 11, BALL: 16, NBALL: 40, BARREL: 56, NBARREL: 16, COIN: 72, NCOIN: 56, CHAIN: 128, NCHAIN: 34, CRATE: 168, NCRATE: 12, FRUIT: 180, NFRUIT: 40, TOTAL: 220 };
+const MAT = { DEFAULT: 0, FLOOR: 1, TERRAIN: 2, STRATA: 3, GUMMY: 4, FROND: 5, TRUNK: 6, SAIL: 7, FLAG: 8, WINDOW: 9, LANTERN: 10, EMBER: 11, METAL: 12, GOLD: 13, GEM: 14, WOOD: 15, ROCK: 16, KELP: 18, GLASS: 19, HULL: 20, GRASS: 21, ROPE: 22, COAL: 23, FALL: 24, FISH: 25 };
+const SLOT = { SHIP: 1, PALM0: 2, LID: 11, BALL: 16, NBALL: 40, BARREL: 56, NBARREL: 16, COIN: 72, NCOIN: 56, CHAIN: 128, NCHAIN: 34, CRATE: 168, NCRATE: 12, FRUIT: 180, NFRUIT: 40, FISH: 220, NFISH: 40, ENEMY: 260, TOTAL: 262 };
 
 const COL = {
   wood: [0.45, 0.28, 0.14], woodDark: [0.28, 0.17, 0.09], iron: [0.12, 0.12, 0.13], gold: [1.0, 0.74, 0.28],
@@ -31,8 +31,7 @@ const SHIP = {
   masts: [{ z: 0.3, h: 0.98 }, { z: 0.0, h: 1.16 }, { z: -0.37, h: 0.8 }],
 };
 
-function buildShip(mb) {
-  const O = SLOT.SHIP;
+function buildShip(mb, O = SLOT.SHIP, sailCol = COL.sail) {
   const NZ = 44, NU = 18;
   // hull sides (uv.x carries local height for crisp paint bands)
   for (const side of [1, -1]) {
@@ -112,7 +111,7 @@ function buildShip(mb) {
       const hw = lerp(sq.w0, sq.w1, vv);
       const bil = 0.075 * Math.sin(Math.PI * Math.min(vv * 0.9 + 0.1, 1)) * (1 - 0.65 * s * s);
       return { p: [s * hw, lerp(yT, yB, vv) + 0.02 * vv * vv * (1 - s * s), z - bil], uv: [uu, 1 - vv] };
-    }, { col: COL.sail, mat: MAT.SAIL, obj: O, flexFn: (uu, vv) => vv });
+    }, { col: sailCol, mat: MAT.SAIL, obj: O, flexFn: (uu, vv) => vv });
     yards.push({ m: sq.m, y: yT, w: sq.w0 });
   }
   // gaff sail on the mizzen
@@ -127,7 +126,7 @@ function buildShip(mb) {
       const p = v3.lerp(bot, top, vv);
       p[0] += 0.05 * Math.sin(Math.PI * uu) * Math.sin(Math.PI * vv);
       return { p, uv: [uu, vv] };
-    }, { col: COL.sail, mat: MAT.SAIL, obj: O, flexFn: (uu) => uu });
+    }, { col: sailCol, mat: MAT.SAIL, obj: O, flexFn: (uu) => uu });
   }
   // jib to the bowsprit
   {
@@ -139,7 +138,7 @@ function buildShip(mb) {
       const q = v3.lerp(p, v3.lerp(head, clew, vv), 0);
       const k = vv * (1 - vv) * 4 * Math.sin(Math.PI * uu);
       return { p: [q[0] + 0.04 * k, lerp(a[1], clew[1], vv * (1 - uu)), lerp(a[2], clew[2], vv * (1 - uu))], uv: [uu, vv] };
-    }, { col: COL.sail, mat: MAT.SAIL, obj: O, flexFn: (uu, vv) => vv });
+    }, { col: sailCol, mat: MAT.SAIL, obj: O, flexFn: (uu, vv) => vv });
   }
   // Jolly Roger at the main truck, streaming aft
   {
@@ -672,6 +671,33 @@ function buildIslets(mb) {
   }
 }
 
+// lighthouse on top of the tallest islet
+function buildLighthouse(mb) {
+  const [ix, iz] = ISLETS[0];
+  let top = -9;
+  for (let k = 0; k < 9; k++) top = Math.max(top, H(ix + ((k % 3) - 1) * 0.03, iz + (Math.floor(k / 3) - 1) * 0.03));
+  const base = [ix, top - 0.02, iz];
+  const Ht = 0.42;
+  const M = m4.T(base[0], base[1], base[2]);
+  mb.cyl(M, 0.07, 0.07, 0.04, 16, [0.6, 0.56, 0.5], MAT.ROCK);
+  mb.cyl(m4.mul(M, m4.T(0, 0.04, 0)), 0.055, 0.036, Ht, 18, [1, 1, 1], MAT.DEFAULT, 0, {
+    nv: 12, colFn: (u, v) => (Math.floor(v * 5) % 2 === 0 ? [0.94, 0.92, 0.88] : [0.78, 0.16, 0.13]),
+  });
+  const gy = 0.04 + Ht;
+  mb.cyl(m4.mul(M, m4.T(0, gy, 0)), 0.058, 0.058, 0.012, 16, [0.15, 0.15, 0.16], MAT.METAL);
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    mb.tube([base[0] + Math.cos(a) * 0.055, base[1] + gy + 0.012, base[2] + Math.sin(a) * 0.055], [base[0] + Math.cos(a) * 0.055, base[1] + gy + 0.04, base[2] + Math.sin(a) * 0.055], 0.0025, 4, [0.15, 0.15, 0.16], MAT.METAL);
+  }
+  mb.cyl(m4.mul(M, m4.T(0, gy + 0.012, 0)), 0.032, 0.032, 0.05, 12, [1, 0.85, 0.5], MAT.LANTERN);
+  mb.cyl(m4.mul(M, m4.T(0, gy + 0.062, 0)), 0.044, 0.004, 0.045, 14, [0.72, 0.15, 0.12], MAT.METAL);
+  mb.sphere(m4.mul(M, m4.T(0, gy + 0.11, 0)), 0.007, 0.007, 0.007, 6, 4, [0.15, 0.15, 0.16], MAT.METAL);
+  // door and window
+  mb.box(m4.mul(M, m4.T(0.052, 0.07, 0)), 0.006, 0.05, 0.026, [0.25, 0.16, 0.1], MAT.WOOD);
+  mb.box(m4.mul(M, m4.T(0.044, 0.26, 0)), 0.006, 0.026, 0.016, [1, 0.8, 0.45], MAT.WINDOW);
+  LAYOUT.lamp = [base[0], base[1] + gy + 0.037, base[2]];
+}
+
 function buildMain() {
   const mb = new MB();
   buildTerrain(mb);
@@ -680,6 +706,7 @@ function buildMain() {
   buildWaterfall(mb);
   buildLedgeJungle(mb);
   buildIslets(mb);
+  buildLighthouse(mb);
   buildCamp(mb);
   buildChest(mb);
   buildBeachProps(mb);
@@ -725,7 +752,20 @@ function buildInstanced() {
     const s = lerp(-1, 1, vv), w = 0.007 * Math.sin(Math.PI * uu);
     return { p: [-0.024 - uu * 0.012, 0.02 + uu * 0.012 - uu * uu * 0.006, s * w], n: [0.3, 1, 0] };
   }, { M: m4.S(1.4), col: [0.25, 0.62, 0.18], mat: MAT.GUMMY, obj: SLOT.FRUIT });
-  return { ball: ball.build(), barrel: barrel.build(), coin: coin.build(), link: link.build(), crate: crate.build(), fruit: fruit.build() };
+  // gummy fish: body along +z, tail fin at -z (flex drives the wiggle)
+  const fish = new MB();
+  const FS = 1.6;
+  fish.sphere(m4.S(FS), 0.016, 0.019, 0.04, 14, 9, [1, 1, 1], MAT.FISH, SLOT.FISH);
+  fish.surf(4, 3, (uu, vv) => {
+    const z = -0.034 - uu * 0.028, h = lerp(0.006, 0.022, uu) * lerp(-1, 1, vv);
+    return { p: [0, h, z], n: [1, 0, 0], f: 0.4 + uu * 0.6 };
+  }, { M: m4.S(FS), col: [1, 1, 1], mat: MAT.FISH, obj: SLOT.FISH });
+  fish.surf(4, 2, (uu, vv) => ({ p: [0, 0.016 + vv * 0.012 * Math.sin(Math.PI * uu), lerp(0.012, -0.022, uu)], n: [1, 0, 0] }), { M: m4.S(FS), col: [1, 1, 1], mat: MAT.FISH, obj: SLOT.FISH });
+  for (const s of [1, -1]) fish.sphere(m4.mul(m4.S(FS), m4.T(s * 0.012, 0.005, 0.026)), 0.0045, 0.0045, 0.0045, 6, 4, [0.03, 0.03, 0.04], MAT.METAL, SLOT.FISH);
+  // the rival: same rig, oxblood sails, own slot (scaled down when placed)
+  const enemy = new MB();
+  buildShip(enemy, SLOT.ENEMY, [0.62, 0.2, 0.16]);
+  return { ball: ball.build(), barrel: barrel.build(), coin: coin.build(), link: link.build(), crate: crate.build(), fruit: fruit.build(), fish: fish.build(), enemy: enemy.build() };
 }
 
 function buildFloor() {

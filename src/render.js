@@ -7,7 +7,7 @@ const HDR = 'rgba16float';
 class Renderer {
   constructor(device, context, format) {
     this.device = device; this.context = context; this.format = format;
-    this.uni = new Float32Array(144);
+    this.uni = new Float32Array(152);
     this.objData = new Float32Array(SLOT.TOTAL * 20);
     this.size = [0, 0];
   }
@@ -172,6 +172,7 @@ class Renderer {
       drawMesh(pass, M.main);
       drawMesh(pass, M.ball, counts.ball); drawMesh(pass, M.barrel, counts.barrel); drawMesh(pass, M.coin, counts.coin);
       drawMesh(pass, M.crate, SLOT.NCRATE); drawMesh(pass, M.fruit, SLOT.NFRUIT);
+      drawMesh(pass, M.fish, SLOT.NFISH); drawMesh(pass, M.enemy);
       pass.end();
     }
     // 2. opaque scene
@@ -187,6 +188,7 @@ class Renderer {
       drawMesh(pass, M.main);
       drawMesh(pass, M.ball, counts.ball); drawMesh(pass, M.barrel, counts.barrel); drawMesh(pass, M.coin, counts.coin);
       drawMesh(pass, M.crate, SLOT.NCRATE); drawMesh(pass, M.fruit, SLOT.NFRUIT);
+      drawMesh(pass, M.fish, SLOT.NFISH); drawMesh(pass, M.enemy);
       drawMesh(pass, M.link, SLOT.NCHAIN);
       pass.setPipeline(this.pSkull);
       drawMesh(pass, M.skull);
