@@ -4,8 +4,13 @@
   "private": true,
   "description": "Material Studies: a pirate cove set in a wobbling block of sea jelly, rendered and simulated with WebGPU.",
   "scripts": {
+    "dev": "node scripts/dev.js",
+    "start": "node scripts/dev.js",
     "build": "node build.js",
-    "serve": "npx --yes serve dist"
+    "preview": "node scripts/dev.js --no-watch"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  }
 }

@@ -4,12 +4,18 @@ Part of the **Material Studies** series of jelly dioramas: a tropical pirate cov
 
 ## Run it
 
-The build produces a single self-contained page.
+No install step and no dependencies. You only need Node 18+.
 
 ```sh
-npm run build          # writes dist/pirate-jelly.html
-npm run serve          # or open dist/pirate-jelly.html directly in Chrome / Edge
+npm run dev       # build, serve on http://localhost:5173, open the browser,
+                  # and rebuild + reload whenever you save a file in src/
+npm run build     # just write dist/pirate-jelly.html
+npm run preview   # build once and serve it, no watching
 ```
+
+`npm start` is an alias for `npm run dev`. Options: `PORT=8080 npm run dev`, or `npm run dev -- --no-open` to skip opening a browser.
+
+You can also open `dist/pirate-jelly.html` directly; it is a single self-contained file.
 
 Needs a browser with WebGPU (current Chrome or Edge, Safari 26+). Without it the page shows a fallback card.
 
@@ -26,6 +32,7 @@ Needs a browser with WebGPU (current Chrome or Edge, Safari 26+). Without it the
 | `src/main.js` | Boot, WebGPU fallback, input handling, UI wiring, render loop |
 | `src/page.html` | Page shell: masthead, control panel, how-to strip, styles |
 | `build.js` | Concatenates `src/` into `dist/pirate-jelly.html` |
+| `scripts/dev.js` | Zero-dependency dev server with file watching and live reload |
 
 ## Playing
 
