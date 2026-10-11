@@ -1,0 +1,250 @@
+<title>Pirate Jelly</title>
+<meta name="description" content="Material Studies: a pirate cove set in a block of jelly, rendered live with WebGPU.">
+<style>
+/* Layout: full-bleed WebGPU diorama; editorial masthead top-left, glass control panel right (bottom sheet on phones), how-to strip bottom-left. */
+:root {
+  --paper: #f1ede6;
+  --ink: #1b2124;
+  --ink-soft: #5a6265;
+  --line: rgba(27, 33, 36, 0.14);
+  --glass: rgba(252, 249, 244, 0.64);
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --accent: #1f8f8f;
+  --accent-ink: #ffffff;
+  --live: #2f9e62;
+  --paused: #c98a1a;
+  --off: #c4472f;
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", "URW Palladio L", Georgia, serif;
+  --body: "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --r: 16px;
+  --peek: 132px;
+  color-scheme: light;
+}
+:root[data-flavour="rum"] { --accent: #b26512; }
+:root[data-flavour="kraken"] { --accent: #7643bd; }
+:root.night {
+  --paper: #0b0d18;
+  --ink: #eef0f7;
+  --ink-soft: #a3a9bf;
+  --line: rgba(255, 255, 255, 0.14);
+  --glass: rgba(18, 20, 36, 0.58);
+  --glass-edge: rgba(255, 255, 255, 0.12);
+  --accent: #3fc2bd;
+  color-scheme: dark;
+}
+:root.night[data-flavour="rum"] { --accent: #e3963a; }
+:root.night[data-flavour="kraken"] { --accent: #a77ff0; }
+
+html, body { height: 100%; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 14px;
+  overflow: hidden; -webkit-font-smoothing: antialiased; transition: background 0.6s, color 0.6s;
+}
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+
+/* masthead */
+.mast {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 26px); left: 30px; max-width: 360px;
+  pointer-events: none; display: grid; gap: 10px;
+}
+.eyebrow { margin: 0; font: 600 11px/1 var(--mono); letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft); }
+.mast h1 {
+  margin: 0; font-family: var(--display); font-style: italic; font-weight: 400;
+  font-size: clamp(54px, 7.4vw, 100px); line-height: 0.86; letter-spacing: -0.025em; text-wrap: balance;
+}
+.mast h1 .dot { color: var(--accent); transition: color 0.4s; }
+.dek { margin: 4px 0 0; max-width: 30ch; font-size: 14.5px; line-height: 1.45; color: var(--ink-soft); }
+.pill {
+  pointer-events: auto; justify-self: start; display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  font: 600 10.5px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft);
+}
+.pill .led { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-soft); }
+.pill[data-state="live"] .led { background: var(--live); box-shadow: 0 0 0 3px color-mix(in srgb, var(--live) 25%, transparent); animation: pulse 2.4s ease-in-out infinite; }
+.pill[data-state="paused"] .led { background: var(--paused); }
+.pill[data-state="off"] .led { background: var(--off); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--live) 0%, transparent); } }
+
+/* control panel */
+.panel {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 20px); right: 20px; width: 292px;
+  max-height: calc(100% - 40px - env(safe-area-inset-top, 0px)); overflow-y: auto;
+  background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 20px;
+  backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  box-shadow: 0 18px 50px -24px rgba(20, 30, 40, 0.45);
+  padding: 18px 18px 16px; display: grid; gap: 18px; transition: background 0.6s, border-color 0.6s;
+}
+.panel section { display: grid; gap: 12px; }
+.panel section + section { padding-top: 16px; border-top: 1px solid var(--line); }
+.panel h2 { margin: 0; font: italic 400 24px/1 var(--display); letter-spacing: -0.01em; }
+.sheet-handle { display: none; }
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+button {
+  font: 600 12px/1.1 var(--body); color: var(--ink); background: transparent; border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 6px; cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.08s;
+}
+button:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+button:active { transform: translateY(1px); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover { background: color-mix(in srgb, var(--accent) 86%, #000); }
+.meter { display: grid; gap: 6px; }
+.label { display: flex; justify-content: space-between; font: 600 10.5px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+.label output { letter-spacing: 0.04em; text-transform: none; color: var(--ink); font-weight: 500; }
+.track { height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.fill { height: 100%; width: 100%; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, transparent), var(--accent)); transform-origin: left; transform: scaleX(0); transition: transform 0.12s linear; }
+.tally { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.tally div { display: grid; gap: 3px; }
+.tally dt { font: 600 10px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+.tally dd { margin: 0; font: 400 30px/1 var(--display); font-variant-numeric: tabular-nums lining-nums; }
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.swatches button { display: grid; justify-items: center; gap: 7px; padding: 10px 4px 9px; }
+.swatches button[aria-checked="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.sw { width: 26px; height: 26px; border-radius: 9px; box-shadow: inset 0 -6px 10px rgba(0, 0, 0, 0.18), inset 0 4px 6px rgba(255, 255, 255, 0.55); }
+.sw.turquoise { background: linear-gradient(160deg, #9fe6df, #1c9a9a 70%); }
+.sw.rum { background: linear-gradient(160deg, #f5c77e, #a9560f 70%); }
+.sw.kraken { background: linear-gradient(160deg, #cfb4f6, #5e2fa6 70%); }
+.slider { display: grid; gap: 8px; }
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; margin: 0; }
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: var(--line); }
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 4px; background: var(--line); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--paper); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); }
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid var(--paper); }
+.ticks { display: flex; justify-content: space-between; font: 500 9px/1 var(--mono); color: var(--ink-soft); letter-spacing: 0.06em; margin-top: -2px; }
+.row.small button { font-weight: 500; padding: 8px 4px; }
+
+/* how to play */
+.howto {
+  position: fixed; left: 30px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); max-width: min(560px, calc(100% - 380px));
+  pointer-events: none; display: grid; gap: 8px;
+}
+.howto p { margin: 0; font-size: 14px; line-height: 1.4; }
+.howto p strong { font: italic 400 19px/1 var(--display); margin-right: 8px; }
+.howto ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; font: 500 10.5px/1.5 var(--mono); letter-spacing: 0.03em; color: var(--ink-soft); }
+.howto kbd { font: inherit; color: var(--ink); }
+
+/* fallback */
+.fallback {
+  position: fixed; inset: 0; display: grid; place-items: center; padding: 24px 16px; z-index: 5;
+  background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 16%, var(--paper)), var(--paper) 70%);
+}
+.card { max-width: 440px; background: var(--glass); border: 1px solid var(--line); border-radius: 22px; padding: 28px 26px; display: grid; gap: 12px; box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.4); }
+.card h2 { margin: 0; font: italic 400 34px/1.02 var(--display); }
+.card p { margin: 0; line-height: 1.55; color: var(--ink-soft); }
+.card .detail { font: 500 11px/1.5 var(--mono); color: var(--ink-soft); }
+.no-gpu .panel, .no-gpu .howto { display: none; }
+
+@media (max-width: 760px) {
+  .mast { left: 18px; top: calc(env(safe-area-inset-top, 0px) + 16px); gap: 7px; }
+  .mast h1 { font-size: 52px; }
+  .dek { display: none; }
+  .howto { display: none; }
+  .panel {
+    top: auto; right: 0; left: 0; bottom: 0; width: auto; border-radius: 22px 22px 0 0; max-height: 64%;
+    padding: 6px 16px calc(env(safe-area-inset-bottom, 0px) + 16px); gap: 14px;
+    transform: translateY(calc(100% - var(--peek) - env(safe-area-inset-bottom, 0px)));
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.6s;
+  }
+  .panel.open { transform: none; }
+  .sheet-handle {
+    display: grid; justify-items: center; gap: 6px; border: 0; padding: 8px 0 2px; background: transparent;
+    font: 600 10px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  .sheet-handle::before { content: ""; width: 38px; height: 4px; border-radius: 4px; background: var(--line); }
+  .sheet-handle:hover { background: transparent; }
+  .panel h2 { font-size: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+<canvas id="gl" aria-label="Pirate Jelly: an interactive diorama of a pirate cove set in a block of jelly"></canvas>
+
+<header class="mast">
+  <p class="eyebrow">Material Studies</p>
+  <h1>Pirate<br>Jelly<span class="dot">.</span></h1>
+  <p class="dek">A pirate cove set in a wobbling block of sea jelly. Tip it, fire a broadside, and dig where the X is.</p>
+  <div class="pill" id="status" data-state="starting" role="status"><span class="led"></span><span id="statusText">WebGPU · Starting</span></div>
+</header>
+
+<aside class="panel" id="panel" aria-label="Controls">
+  <button class="sheet-handle" id="sheetHandle" aria-expanded="false" aria-controls="panel">Controls</button>
+  <section>
+    <h2>The cove</h2>
+    <div class="row">
+      <button class="primary" id="btnFire">Fire a gun</button>
+      <button id="btnCoins">Doubloons</button>
+      <button id="btnBarrel">Barrel</button>
+    </div>
+    <div class="meter">
+      <div class="label"><span>Liveliness</span></div>
+      <div class="track"><div class="fill" id="lively"></div></div>
+    </div>
+    <dl class="tally">
+      <div><dt>Shots</dt><dd id="tShots">0</dd></div>
+      <div><dt>Afloat</dt><dd id="tAfloat">0</dd></div>
+      <div><dt>Sunk</dt><dd id="tSunk">0</dd></div>
+      <div><dt>Fruit</dt><dd id="tFruit">0</dd></div>
+    </dl>
+  </section>
+  <section>
+    <h2>Flavour</h2>
+    <div class="swatches" role="radiogroup" aria-label="Jelly flavour">
+      <button role="radio" aria-checked="true" data-flavour="turquoise" id="flTurq"><span class="sw turquoise"></span>Turquoise</button>
+      <button role="radio" aria-checked="false" data-flavour="rum" id="flRum"><span class="sw rum"></span>Rum</button>
+      <button role="radio" aria-checked="false" data-flavour="kraken" id="flKraken"><span class="sw kraken"></span>Kraken</button>
+    </div>
+    <div class="slider">
+      <label class="label" for="firm"><span>Firmness</span><output id="firmVal">Set</output></label>
+      <input type="range" id="firm" min="0" max="100" value="55">
+    </div>
+    <div class="slider">
+      <label class="label" for="damp"><span>Wave damping</span><output id="dampVal">Calm</output></label>
+      <input type="range" id="damp" min="0" max="100" value="35">
+    </div>
+    <div class="slider">
+      <label class="label" for="tod"><span>Time of day</span><output id="todVal">Golden hour</output></label>
+      <input type="range" id="tod" min="0" max="100" value="32">
+      <div class="ticks" aria-hidden="true"><span>Noon</span><span>Sunset</span><span>Midnight</span></div>
+    </div>
+    <div class="row small">
+      <button id="btnReset">Reset</button>
+      <button id="btnPause" aria-pressed="false">Pause</button>
+      <button id="btnView">Reset view</button>
+    </div>
+  </section>
+</aside>
+
+<footer class="howto">
+  <p><strong>How to play</strong>Tap the ship to fire the gun facing you. Drag her to tow against the anchor.</p>
+  <ul>
+    <li>Drag the sea · waves</li>
+    <li>Drag a cut face · tip the block</li>
+    <li>Tap the chest · lid</li>
+    <li>Tap the fire · roar</li>
+    <li>Tap the X · dig</li>
+    <li>Tap or shoot a crate · smash</li>
+    <li>Tap fruit · collect</li>
+    <li>Grab balls, barrels, coins · throw</li>
+    <li>Drag a palm · bend</li>
+    <li>Drag empty space or right-drag · orbit</li>
+    <li>Wheel or pinch · zoom</li>
+    <li><kbd>Space</kbd> · fire</li>
+  </ul>
+</footer>
+
+<div class="fallback" id="fallback" hidden>
+  <div class="card">
+    <p class="eyebrow">Material Studies</p>
+    <h2>This jelly needs WebGPU to set.</h2>
+    <p>Pirate Jelly renders and simulates on the graphics card. Open it in a current Chrome or Edge, or Safari 26 and later, on a device with hardware acceleration switched on.</p>
+    <p class="detail" id="fallbackDetail"></p>
+  </div>
+</div>
+
+<script>
+/*__SCRIPT__*/
+</script>

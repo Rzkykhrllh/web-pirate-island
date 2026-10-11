@@ -1,0 +1,11 @@
+{
+  "name": "pirate-jelly",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Material Studies: a pirate cove set in a wobbling block of sea jelly, rendered and simulated with WebGPU.",
+  "scripts": {
+    "build": "node build.js",
+    "serve": "npx --yes serve dist"
+  },
+  "license": "UNLICENSED"
+}
