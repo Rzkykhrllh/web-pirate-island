@@ -386,7 +386,7 @@ function buildBeachProps(mb) {
 function buildVegetation(mb) {
   rngState = 4242;
   // gummy bushes
-  const bushes = [[-0.62, -1.05], [-1.1, -0.7], [-0.25, -1.0], [-0.9, -1.25], [-1.35, -1.25], [-0.4, -1.35], [-0.1, -1.55], [-1.2, -1.65], [-0.58, -1.9], [-1.05, -0.45], [-0.15, -0.6], [0.12, -1.18]];
+  const bushes = [[-0.62, -1.05], [-1.1, -0.7], [-0.9, -1.25], [-1.35, -1.25], [-0.4, -1.35], [-0.1, -1.55], [-1.2, -1.65], [-0.58, -1.9], [-1.05, -0.45], [-0.15, -0.6], [0.12, -1.18]];
   const greens = [[0.2, 0.62, 0.18], [0.36, 0.72, 0.2], [0.15, 0.5, 0.2], [0.45, 0.68, 0.16]];
   const flowers = [[1.0, 0.32, 0.52], [1.0, 0.78, 0.18], [0.95, 0.2, 0.2], [1.0, 0.55, 0.85]];
   LAYOUT.bushes = [];
@@ -571,7 +571,7 @@ function buildPalms(mb) {
   const spots = [
     [-0.95, -1.45, 0.95, [0.05, 0.08]], [-0.45, -1.62, 0.85, [0.12, -0.02]], [-1.3, -1.05, 0.8, [-0.1, 0.06]],
     [-0.08, -1.3, 0.75, [0.16, 0.1]], [-0.78, -1.95, 0.9, [0.02, -0.06]], [-1.5, -0.72, 0.7, [-0.18, 0.12]],
-    [0.2, -0.95, 0.66, [0.2, 0.14]], [-0.96, -0.64, 0.74, [0.22, 0.2]], [-1.62, -1.42, 0.78, [-0.12, -0.05]],
+    [-0.5, -0.8, 0.66, [0.2, 0.14]], [-0.96, -0.64, 0.74, [0.22, 0.2]], [-1.62, -1.42, 0.78, [-0.12, -0.05]],
   ];
   spots.push([-0.3, -1.12, 0.62, [0.14, 0.12]], [-1.02, -1.08, 0.66, [-0.12, 0.1]], [0.12, -1.32, 0.6, [0.16, -0.06]], [-0.62, -0.98, 0.58, [0.04, 0.16]]);
   const slots = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15];
@@ -698,6 +698,182 @@ function buildLighthouse(mb) {
   LAYOUT.lamp = [base[0], base[1] + gy + 0.037, base[2]];
 }
 
+// ── tide-line village: round thatched huts, bamboo palisade, lookout tower, path markers, jetty ──
+function thatchRoof(mb, M, r, h, seed) {
+  // layered shaggy cone: stacked rings with ragged hem
+  mb.cyl(M, r, 0.004, h, 20, [0.78, 0.62, 0.3], MAT.DEFAULT, 0, {
+    nv: 8, colFn: (u, v) => { const b = Math.floor(v * 7) % 2 === 0; const j = 0.04 * (vnoise2(u * 18 + seed, v * 4) - 0.5); return b ? [0.8 + j, 0.64 + j, 0.3] : [0.66 + j, 0.5 + j, 0.22]; },
+    rf: (v) => r * Math.pow(1 - v, 1.1) * (1 + 0.05 * Math.sin(v * 50 + seed)) + 0.004,
+  });
+  // hem fringe
+  for (let k = 0; k < 20; k++) {
+    const a = (k / 20) * Math.PI * 2 + seed;
+    const b = m4.pt(M, [Math.cos(a) * r * 0.97, 0.004, Math.sin(a) * r * 0.97]);
+    const t = m4.pt(M, [Math.cos(a) * r * 1.07, -0.016, Math.sin(a) * r * 1.07]);
+    mb.tube(b, t, 0.0042, 4, [0.62, 0.48, 0.2], MAT.GRASS, 0, { flex: 0.2 });
+  }
+}
+
+function buildHut(mb, x, z, yaw, r, seed) {
+  const y = H(x, z) - 0.012;
+  const M = m4.chain(m4.T(x, y, z), m4.RY(yaw));
+  const wh = r * 1.0;
+  // stilted floor + wattle wall
+  mb.cyl(m4.mul(M, m4.T(0, 0.004, 0)), r * 1.12, r * 1.12, 0.014, 18, [0.55, 0.38, 0.2], MAT.WOOD);
+  mb.cyl(m4.mul(M, m4.T(0, 0.018, 0)), r * 0.92, r * 0.86, wh, 18, [1, 1, 1], MAT.DEFAULT, 0, {
+    nv: 6, colFn: (u, v) => (Math.floor(u * 18) % 2 === 0 ? [0.82, 0.68, 0.45] : [0.7, 0.56, 0.36]),
+  });
+  // door + shuttered window (glows warm at night)
+  mb.box(m4.mul(M, m4.chain(m4.T(r * 0.9, 0.018 + wh * 0.34, 0), m4.RY(0))), 0.012, wh * 0.62, r * 0.42, [0.3, 0.19, 0.1], MAT.WOOD);
+  mb.box(m4.mul(M, m4.T(Math.cos(2.3) * r * 0.9, 0.018 + wh * 0.62, Math.sin(2.3) * r * 0.9)), 0.012, wh * 0.26, r * 0.26, [1, 0.78, 0.4], MAT.WINDOW);
+  // roof poles cross at the apex
+  const top = 0.018 + wh + r * 1.25;
+  thatchRoof(mb, m4.mul(M, m4.T(0, 0.018 + wh - 0.004, 0)), r * 1.3, r * 1.3, seed);
+  for (const s of [1, -1]) mb.tube(m4.pt(M, [s * 0.016, top - 0.04, 0]), m4.pt(M, [-s * 0.012, top + 0.03, 0.004 * s]), 0.0032, 4, [0.4, 0.25, 0.13], MAT.WOOD);
+  // porch posts and a hanging gourd
+  for (const s of [1, -1]) mb.tube(m4.pt(M, [r * 1.08, 0.01, s * r * 0.34]), m4.pt(M, [r * 1.08, 0.018 + wh * 0.9, s * r * 0.34]), 0.0042, 5, [0.45, 0.28, 0.14], MAT.WOOD);
+  mb.sphere(m4.mul(M, m4.T(r * 1.1, 0.018 + wh * 0.58, r * 0.34)), 0.011, 0.015, 0.011, 8, 6, [0.85, 0.62, 0.18], MAT.GUMMY);
+  return [x, y + 0.07, z];
+}
+
+function buildPalisade(mb, pts, gate) {
+  // pts: polyline of [x,z]; stakes every ~0.032, gap where |t-gate| small
+  let acc = 0, k = 0;
+  rngState = 909;
+  const out = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i], b = pts[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const n = Math.max(1, Math.round(L / 0.034));
+    for (let j = 0; j <= n; j++) {
+      const t = j / n, x = lerp(a[0], b[0], t), z = lerp(a[1], b[1], t);
+      if (Math.abs(x - gate) < 0.07) continue;
+      const y = H(x, z) - 0.01;
+      if (y < 0.0) continue;
+      const h = 0.085 + 0.025 * rnd();
+      const tilt = rr(-0.05, 0.05);
+      const c = (k++ % 3 === 0) ? [0.66, 0.55, 0.28] : [0.56, 0.46, 0.22];
+      const A = [x, y, z], B = [x + tilt, y + h, z + rr(-0.01, 0.01)];
+      mb.tube(A, B, 0.0125, 6, c, MAT.WOOD, 0, { r1: 0.55 });
+      // sharpened tip
+      mb.tube(B, [B[0], B[1] + 0.03, B[2]], 0.0069, 6, [0.4, 0.3, 0.14], MAT.WOOD, 0, { r1: 0.05 });
+      out.push([x, z]);
+    }
+  }
+  // two lashed rails
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i], b = pts[i + 1];
+    for (const hy of [0.035, 0.07]) {
+      const ay = H(a[0], a[1]) + hy, by = H(b[0], b[1]) + hy;
+      mb.tube([a[0], ay, a[1]], [b[0], by, b[1]], 0.0034, 4, COL.rope, MAT.ROPE);
+    }
+  }
+  // gate: two tall posts with a cross-beam, torches, and a pennant
+  const gz = lerp(pts[0][1], pts[pts.length - 1][1], 0.5);
+  const gzAt = (() => { for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], b = pts[i + 1]; if (gate >= Math.min(a[0], b[0]) && gate <= Math.max(a[0], b[0])) return lerp(a[1], b[1], (gate - a[0]) / (b[0] - a[0] || 1)); } return gz; })();
+  for (const s of [-1, 1]) {
+    const gx = gate + s * 0.075, gy = H(gx, gzAt) - 0.012;
+    mb.tube([gx, gy, gzAt], [gx, gy + 0.19, gzAt], 0.0165, 7, [0.46, 0.3, 0.15], MAT.WOOD);
+    mb.sphere(m4.T(gx, gy + 0.2, gzAt), 0.02, 0.02, 0.02, 8, 6, [0.88, 0.6, 0.2], MAT.GUMMY);
+    // torch
+    mb.tube([gx + s * 0.03, gy, gzAt + 0.045], [gx + s * 0.03, gy + 0.11, gzAt + 0.045], 0.005, 5, [0.35, 0.22, 0.12], MAT.WOOD);
+    mb.sphere(m4.T(gx + s * 0.03, gy + 0.12, gzAt + 0.045), 0.012, 0.017, 0.012, 8, 6, [1, 0.62, 0.22], MAT.LANTERN);
+  }
+  const by = H(gate, gzAt) + 0.17;
+  mb.tube([gate - 0.075, by, gzAt], [gate + 0.075, by, gzAt], 0.0095, 6, [0.5, 0.33, 0.17], MAT.WOOD);
+  mb.tube([gate - 0.06, by - 0.01, gzAt], [gate + 0.06, by - 0.03, gzAt + 0.002], 0.003, 4, COL.rope, MAT.ROPE);
+  return { gate: [gate, H(gate, gzAt), gzAt], n: out.length };
+}
+
+function buildTower(mb, x, z) {
+  const y = H(x, z) - 0.015, s = 0.055, plat = 0.34;
+  // four splayed legs
+  for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+    const bx = x + sx * s * 1.15, bz = z + sz * s * 1.15;
+    mb.tube([bx, H(bx, bz) - 0.02, bz], [x + sx * s, y + plat, z + sz * s], 0.0095, 6, [0.46, 0.3, 0.15], MAT.WOOD);
+  }
+  // cross-bracing
+  for (const h of [0.11, 0.22]) {
+    const k = 1 + (0.3 - h) * 0.12;
+    const P = [[1, 1], [-1, 1], [-1, -1], [1, -1]].map(([sx, sz]) => [x + sx * s * k, y + h, z + sz * s * k]);
+    for (let i = 0; i < 4; i++) mb.tube(P[i], P[(i + 1) % 4], 0.0042, 4, COL.rope, MAT.ROPE);
+    mb.tube(P[0], [P[2][0], y + h + 0.1, P[2][2]], 0.0036, 4, COL.rope, MAT.ROPE);
+  }
+  // platform + rail
+  mb.box(m4.T(x, y + plat, z), s * 2.9, 0.014, s * 2.9, [0.62, 0.44, 0.24], MAT.WOOD);
+  for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+    mb.tube([x + sx * s * 1.4, y + plat, z + sz * s * 1.4], [x + sx * s * 1.4, y + plat + 0.2, z + sz * s * 1.4], 0.0075, 5, [0.46, 0.3, 0.15], MAT.WOOD);
+  }
+  for (const [ax, az, bx, bz] of [[1, 1, -1, 1], [-1, 1, -1, -1], [-1, -1, 1, -1], [1, -1, 1, 1]]) {
+    mb.tube([x + ax * s * 1.4, y + plat + 0.05, z + az * s * 1.4], [x + bx * s * 1.4, y + plat + 0.05, z + bz * s * 1.4], 0.0042, 4, COL.rope, MAT.ROPE);
+  }
+  // thatched roof on four posts, small lantern under it
+  const ry = y + plat + 0.2;
+  thatchRoof(mb, m4.T(x, ry, z), s * 2.3, 0.1, 3.3);
+  mb.sphere(m4.T(x, y + plat + 0.1, z), 0.016, 0.02, 0.016, 8, 6, [1, 0.78, 0.4], MAT.LANTERN);
+  // ladder
+  const lb = [x + s * 1.15, H(x + s * 2.0, z) - 0.01, z - s * 1.2], lt = [x + s * 1.35, y + plat, z - s * 1.2];
+  for (const o of [-0.016, 0.016]) mb.tube([lb[0] + 0.05, lb[1], lb[2] + o], [lt[0], lt[1], lt[2] + o], 0.0034, 4, [0.55, 0.38, 0.2], MAT.WOOD);
+  for (let r = 1; r < 8; r++) {
+    const t = r / 8;
+    const p = [lerp(lb[0] + 0.05, lt[0], t), lerp(lb[1], lt[1], t), lb[2]];
+    mb.tube([p[0], p[1], p[2] - 0.016], [p[0], p[1], p[2] + 0.016], 0.0028, 4, [0.55, 0.38, 0.2], MAT.WOOD);
+  }
+  return [x, y + plat * 0.5, z];
+}
+
+function buildMarkers(mb, pts) {
+  const cols = [[0.92, 0.22, 0.18], [0.98, 0.78, 0.18], [0.16, 0.7, 0.72]];
+  let k = 0;
+  for (const [x, z] of pts) {
+    const y = H(x, z);
+    if (y < 0.03) continue;
+    mb.tube([x, y - 0.01, z], [x, y + 0.09, z], 0.0062, 5, [0.5, 0.33, 0.17], MAT.WOOD);
+    const c = cols[k++ % 3];
+    mb.box(m4.chain(m4.T(x, y + 0.095, z), m4.RY(0.6 * k)), 0.034, 0.02, 0.006, c, MAT.DEFAULT);
+    // flat stepping stones
+    for (let j = 1; j <= 2; j++) {
+      const sx = x + 0.07 * j, sz = z + 0.02 * (j % 2 ? 1 : -1);
+      rock(mb, [sx, H(sx, sz) + 0.003, sz], 0.022, [0.62, 0.58, 0.5], 0.22);
+    }
+  }
+}
+
+function buildJetty(mb, x0, z0, len) {
+  const y = 0.045;
+  const n = Math.floor(len / 0.045);
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * 0.045;
+    mb.box(m4.chain(m4.T(x, y, z0), m4.RY(0.01 * ((i * 7) % 5 - 2))), 0.044, 0.01, 0.1, i % 2 ? [0.6, 0.44, 0.24] : [0.52, 0.37, 0.2], MAT.WOOD);
+  }
+  for (let i = 0; i <= n; i += 3) {
+    const x = x0 + i * 0.045 - 0.02;
+    for (const s of [-1, 1]) {
+      const g = Math.min(H(x, z0 + s * 0.05), -0.05);
+      mb.tube([x, g - 0.02, z0 + s * 0.052], [x, y + (i === n ? 0.07 : 0.04), z0 + s * 0.052], 0.0085, 6, [0.42, 0.28, 0.15], MAT.WOOD);
+    }
+  }
+  // mooring rope + lantern post at the end
+  const ex = x0 + n * 0.045 - 0.02;
+  mb.tube([ex, y + 0.05, z0 - 0.05], [ex, y + 0.12, z0 - 0.05], 0.005, 5, [0.4, 0.26, 0.13], MAT.WOOD);
+  mb.sphere(m4.T(ex, y + 0.13, z0 - 0.05), 0.012, 0.016, 0.012, 8, 6, [1, 0.8, 0.45], MAT.LANTERN);
+  return [x0 + n * 0.045, y, z0];
+}
+
+function buildVillage(mb) {
+  rngState = 6060;
+  LAYOUT.village = [];
+  for (const [x, z, yaw, r, seed] of [[-0.03, -0.84, 0.2, 0.062, 1.1], [0.23, -0.86, -0.45, 0.056, 2.7]]) {
+    const c = buildHut(mb, x, z, yaw, r, seed);
+    LAYOUT.village.push({ c, r: r * 1.35 });
+  }
+  const pal = buildPalisade(mb, [[-0.3, -1.0], [-0.12, -0.99], [0.1, -1.0], [0.3, -1.0], [0.46, -0.97]], 0.1);
+  LAYOUT.gate = pal.gate;
+  const tc = buildTower(mb, 0.43, -0.82);
+  LAYOUT.village.push({ c: tc, r: 0.11 }, { c: [tc[0], tc[1] - 0.1, tc[2]], r: 0.1 });
+  buildMarkers(mb, [[-0.2, -0.72], [-0.52, -0.69], [-0.84, -0.72], [-1.12, -0.6]]);
+  LAYOUT.jetty = buildJetty(mb, 0.46, -0.52, 0.5);
+}
+
 function buildMain() {
   const mb = new MB();
   buildTerrain(mb);
@@ -707,6 +883,7 @@ function buildMain() {
   buildLedgeJungle(mb);
   buildIslets(mb);
   buildLighthouse(mb);
+  buildVillage(mb);
   buildCamp(mb);
   buildChest(mb);
   buildBeachProps(mb);

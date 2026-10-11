@@ -85,6 +85,7 @@ class App {
     S.push({ c: v3.add(LAYOUT.rowboat, [0, 0.02, 0]), r: 0.12 });
     for (const b of LAYOUT.barrelProps) S.push({ c: b, r: 0.05 });
     for (const b of LAYOUT.bushes) S.push({ c: b, r: 0.08 });
+    for (const v of LAYOUT.village || []) S.push(v);
     this.caps = LAYOUT.palms.map((p) => ({ p }));
     return S;
   }
