@@ -788,6 +788,7 @@ class App {
     const bow = this.ship.world([0.06, 0.08, 0.5]), A = LAYOUT.anchorRing;
     const span = v3.len(v3.sub(A, bow));
     const slack = Math.max(0, this.ship.rode * 1.04 - span);
+    const chainOn = this.ship.anchored;
     const pts = [];
     for (let i = 0; i <= SLOT.NCHAIN; i++) {
       const s = i / SLOT.NCHAIN;
@@ -803,7 +804,7 @@ class App {
       const ref = Math.abs(z[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
       let x = v3.norm(v3.cross(ref, z)), y = v3.cross(z, x);
       if (i % 2) { const t = x; x = y; y = v3.mul(t, -1); }
-      R.setObj(SLOT.CHAIN + i, m4.basis(x, y, z, v3.lerp(a, b, 0.5)));
+      R.setObj(SLOT.CHAIN + i, chainOn ? m4.basis(x, y, z, v3.lerp(a, b, 0.5)) : m4.S(0));
     }
     const pc = this.parts.pack(this.sprites());
     R.frame(this.water.eta, pc, this.parts.inst, { ball: SLOT.NBALL, barrel: SLOT.NBARREL, coin: SLOT.NCOIN });

@@ -201,6 +201,8 @@ class Ship {
     this.q = q4.axis([0, 1, 0], Math.atan2(-Math.cos(WIND_BASE), -Math.sin(WIND_BASE)));
     this.w = [0, 0, 0];
     this.tow = null;
+    this.keys = { t: 0, s: 0 }; // throttle -1..1, steer -1..1 (+1 = turn left)
+    this.anchored = true;
     this.gunIdx = 0;
     const bow = v3.add(this.p, q4.rot(this.q, [0, 0.07, 0.56]));
     this.rode = v3.len(v3.sub(LAYOUT.anchorRing, bow)) * 1.01;
@@ -237,11 +239,21 @@ class Ship {
     }
     // breeze on the sails, centre of effort aloft and slightly aft
     add([wind[0], 0, wind[1]], this.world([0, 0.45, -0.06]));
-    // elastic anchor rode
+    // keyboard helm: driving weighs anchor; drifting back over it drops anchor again
     const bow = this.world([0, 0.07, 0.56]);
     const A = LAYOUT.anchorRing;
     const d = v3.sub(A, bow), len = v3.len(d);
-    if (len > this.rode) {
+    const K = this.keys, helm = Math.abs(K.t) + Math.abs(K.s) > 0;
+    if (helm && this.anchored) this.anchored = false;
+    if (!helm && !this.anchored && !this.tow && len < 0.28 && Math.hypot(this.v[0], this.v[2]) < 0.12) { this.anchored = true; this.rode = len * 1.01; }
+    if (helm) {
+      const sp = q4.rot(q4.conj(q), this.v)[2];
+      add(q4.rot(q, [0, 0, K.t > 0 ? 2.1 * K.t : 1.0 * K.t]), this.world([0, -0.03, -0.4]));
+      // rudder: bites harder when she has way on
+      const bite = 0.35 + Math.min(Math.abs(sp) * 1.6, 1);
+      T = v3.add(T, v3.mul(up, K.s * 0.9 * bite * (K.t < 0 ? -1 : 1)));
+    }
+    if (this.anchored && len > this.rode) {
       const dir = v3.mul(d, 1 / len);
       const vb = v3.add(this.v, v3.cross(this.w, v3.sub(bow, p)));
       const mag = 5.0 * (len - this.rode) - 0.8 * Math.min(v3.dot(vb, dir), 0);

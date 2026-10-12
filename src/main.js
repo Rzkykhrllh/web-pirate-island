@@ -113,9 +113,18 @@ async function boot() {
     const open = $('panel').classList.toggle('open');
     handle.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
+  // keyboard helm: arrows or WASD
+  const held = new Set();
+  const HELM = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r' };
+  const syncHelm = () => { app.ship.keys.t = (held.has('u') ? 1 : 0) - (held.has('d') ? 1 : 0); app.ship.keys.s = (held.has('l') ? 1 : 0) - (held.has('r') ? 1 : 0); };
+  const typing = (t) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
   window.addEventListener('keydown', (e) => {
+    const h = HELM[e.code];
+    if (h && !typing(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); held.add(h); syncHelm(); return; }
     if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); app.fireGun(); }
   });
+  window.addEventListener('keyup', (e) => { const h = HELM[e.code]; if (h) { held.delete(h); syncHelm(); } });
+  window.addEventListener('blur', () => { held.clear(); syncHelm(); });
 
   // ── pointer interaction ───────────────────────────────────────────────────
   const pointers = new Map();
